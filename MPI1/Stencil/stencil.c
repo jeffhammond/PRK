@@ -125,8 +125,14 @@ int main(int argc, char ** argv) {
   DTYPE  f_active_points; /* interior of grid with respect to stencil            */
   DTYPE  flops;           /* floating point ops per iteration                    */
   int    iterations;      /* number of times to run the algorithm                */
-  double local_stencil_time,/* timing parameters                                 */
+  double local_start_time,/* timing parameters                                 */
+         local_stop_time,
+#ifdef WALL_CLOCK_TIME
+         start_time,
+         stop_time,
+#else
          stencil_time,
+#endif
          avgtime; 
   int    stencil_size;    /* number of points in stencil                         */
   DTYPE  * RESTRICT in;   /* input grid values                                   */
@@ -339,7 +345,7 @@ int main(int argc, char ** argv) {
     /* start timer after a warmup iteration */
     if (iter == 1) { 
       MPI_Barrier(MPI_COMM_WORLD);
-      local_stencil_time = wtime();
+      local_start_time = wtime();
     }
  
     /* need to fetch ghost point data from neighbors in y-direction                 */
@@ -428,9 +434,17 @@ int main(int argc, char ** argv) {
  
   } /* end of iterations                                                   */
 
-  local_stencil_time = wtime() - local_stencil_time;
-  MPI_Reduce(&local_stencil_time, &stencil_time, 1, MPI_DOUBLE, MPI_MAX, root,
+  local_stop_time = wtime();
+#ifdef WALL_CLOCK_TIME
+  MPI_Reduce(&local_start_time, &start_time, 1, MPI_DOUBLE, MPI_MIN, root,
              MPI_COMM_WORLD);
+  MPI_Reduce(&local_stop_time, &stop_time, 1, MPI_DOUBLE, MPI_MAX, root,
+             MPI_COMM_WORLD);
+#else
+  local_stop_time -= local_start_time;
+  MPI_Reduce(&local_stop_time, &stencil_time, 1, MPI_DOUBLE, MPI_MAX, root,
+             MPI_COMM_WORLD);
+#endif
   
   /* compute L1 norm in parallel                                                */
   local_norm = (DTYPE) 0.0;
@@ -474,7 +488,11 @@ int main(int argc, char ** argv) {
     /* flops/stencil: 2 flops (fma) for each point in the stencil, 
        plus one flop for the update of the input of the array        */
     flops = (DTYPE) (2*stencil_size+1) * f_active_points;
+#ifdef WALL_CLOCK_TIME
+    avgtime = (stop_time - start_time)/iterations;
+#else
     avgtime = stencil_time/iterations;
+#endif
     printf("Rate (MFlops/s): "FSTR"  Avg time (s): %lf\n",
            1.0E-06 * flops/avgtime, avgtime);
   }

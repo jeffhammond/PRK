@@ -15,7 +15,7 @@
 include ../../common/LEGION.defs
 LG_RT_DIR=$(LEGIONTOP)/runtime
 
-CXX=$(LEGIONCC)
+CXX=g++
 
 ifndef RADIUS
   RADIUS=2
@@ -24,9 +24,8 @@ endif
 RADIUSFLAG  = -DRADIUS=$(RADIUS)
 
 #Flags for directing the runtime makefile what to include
-#DEBUG           ?= 1		# Include debugging symbols
 DEBUG           ?= 0		# Include debugging symbols
-OUTPUT_LEVEL    ?= LEVEL_DEBUG	# Compile time print level
+OUTPUT_LEVEL    ?= LEVEL_INFO	# Compile time print level
 SHARED_LOWLEVEL ?= 0		# Use shared-memory runtime (not recommended)
 USE_CUDA        ?= 0		# Include CUDA support (requires CUDA)
 USE_GASNET      ?= 0		# Include GASNet support (requires GASNet)
@@ -40,8 +39,8 @@ GEN_SRC		?= stencil.cc 					# .cc files
 
 # You can modify these variables, some will be appended to by the runtime makefile
 INC_FLAGS	?=
-CC_FLAGS	= $(RADIUSFLAG)
-#CC_FLAGS	?= -DPRIVILEGE_CHECKS -DBOUNDS_CHECKS
+CC_FLAGS	= $(RADIUSFLAG) -DPOINTS_ARE_64BIT -DRESTRICT_KEYWORD \
+		  -DDISABLE_BARRIER_MIGRATION # disable barrier migration temporarily
 NVCC_FLAGS	?=
 GASNET_FLAGS	?=
 LD_FLAGS	?=
@@ -57,4 +56,7 @@ usage:
 	@echo "            \"make clean\" to remove objects and executables"
 
 include $(LG_RT_DIR)/runtime.mk
-$(GEN_OBJS): clean
+$(GEN_OBJS): #clean
+
+stencil.o:
+	$(CXX) -o stencil.o -c stencil.cc $(CC_FLAGS) $(INC_FLAGS) -O3

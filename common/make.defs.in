@@ -38,3 +38,6 @@ GRAPPATOP=MYGRAPPATOP
 
 #location where Fine-Grain MPI is installed, e.g. $(HOME)/fgmpi-install
 FGMPITOP=MYFGMPITOP
+
+#location where Legion is installed, e.g. $(HOME)/legion
+LEGIONTOP=MYLEGIONTOP
