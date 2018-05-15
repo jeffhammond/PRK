@@ -62,7 +62,10 @@
 ///
 //////////////////////////////////////////////////////////////////////
 
+
 #include "boost/compute.hpp"
+
+#define LAMBDA_MAKE_TUPLE 1
 
 #include "prk_util.h"
 
