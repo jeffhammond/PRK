@@ -184,7 +184,7 @@ int main(int argc, char* argv[])
     for (auto it=0; it<n; it+=tile_size) {
       for (auto jt=0; jt<n; jt+=tile_size) {
         for (auto i=it; i<std::min(n,it+tile_size); i++) {
-          PRAGMA_SIMD
+          OMP_SIMD
           for (auto j=jt; j<std::min(n,jt+tile_size); j++) {
             in[i*n+j] = static_cast<double>(i+j);
             out[i*n+j] = 0.0;
