@@ -1,10 +1,11 @@
 SWIFT 	= swiftc
 SWFLAGS	= -target x86_64-apple-macosx10.11
 
-all: vector
+all: hello vector
 
-vector: vector.swift
+%: %.swift
 	$(SWIFT) $(SWFLAGS) $< -o $@
 
 clean:
+	-rm -f hello
 	-rm -f vector
