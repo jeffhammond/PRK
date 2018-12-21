@@ -11,5 +11,11 @@ pool:
 
 steps:
 - script: |
-    ls -l && cp common/make.defs.azure common/make.defs && make allserial allopenmp allcxx allc1z
+    ls -l
+    cp common/make.defs.azure common/make.defs
+    make allserial
+    make allopenmp
+    make allc1z
+    ./travis/install-tbb.sh ./Cxx11
+    make allcxx
   displayName: 'make'
