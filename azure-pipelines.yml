@@ -11,5 +11,5 @@ pool:
 
 steps:
 - script: |
-    ls -l && cp common/make.defs.azure common/make.defs && make
+    ls -l && cp common/make.defs.azure common/make.defs && make allserial allopenmp allcxx allc1z
   displayName: 'make'
