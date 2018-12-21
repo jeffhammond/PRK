@@ -10,7 +10,6 @@ pool:
   vmImage: 'Ubuntu-16.04'
 
 steps:
-- script:
-    - cp common/make.defs.gcc common/make.defs
-    - make
+- script: |
+    ls -l && cp common/make.defs.gcc common/make.defs && make
   displayName: 'make'
