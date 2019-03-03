@@ -364,3 +364,10 @@ JAVA/nstream.class
 JAVA/p2p.class
 JAVA/stencil.class
 JAVA/transpose.class
+SWIFT/hello
+SWIFT/vector
+SWIFT/nstream
+SWIFT/p2p
+SWIFT/stencil
+SWIFT/transpose
+SWIFT/dgemm
