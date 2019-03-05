@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2017, Intel Corporation
+/// Copyright (c) 2019, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -59,136 +59,167 @@
 ///          external publications
 ///
 ///          Converted to C++11 by Jeff Hammond, November 2017.
+///          Converted to C11 by Jeff Hammond, February 2019.
 ///
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
-#include "prk_pstl.h"
 
-// See ParallelSTL.md for important information.
+#include <memkind.h>
+#ifndef MEMKIND_PMEM_MIN_SIZE
+# define MEMKIND_PMEM_MIN_SIZE (1024 * 1024 * 16)
+#endif
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
-  std::cout << "C++17/PSTL STREAM triad: A = B + scalar * C" << std::endl;
+  printf("Parallel Research Kernels version %.2f\n", PRKVERSION );
+#ifdef _OPENMP
+  printf("C11/OpenMP STREAM triad: A = B + scalar * C\n");
 #else
-  std::cout << "C++11/STL STREAM triad: A = B + scalar * C" << std::endl;
+  printf("C11 STREAM triad: A = B + scalar * C\n");
 #endif
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
-  int iterations, offset;
-  size_t length;
-  try {
-      if (argc < 3) {
-        throw "Usage: <# iterations> <vector length>";
-      }
-
-      iterations  = std::atoi(argv[1]);
-      if (iterations < 1) {
-        throw "ERROR: iterations must be >= 1";
-      }
-
-      length = std::atol(argv[2]);
-      if (length <= 0) {
-        throw "ERROR: vector length must be positive";
-      }
-
-      offset = (argc>3) ? std::atoi(argv[3]) : 0;
-      if (length <= 0) {
-        throw "ERROR: offset must be nonnegative";
-      }
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
+  if (argc < 3) {
+    printf("Usage: <# iterations> <vector length>\n");
     return 1;
   }
 
-  std::cout << "Number of iterations = " << iterations << std::endl;
-  std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Offset               = " << offset << std::endl;
+  // number of times to do the transpose
+  int iterations = atoi(argv[1]);
+  if (iterations < 1) {
+    printf("ERROR: iterations must be >= 1\n");
+    return 1;
+  }
+
+  // length of a the matrix
+  size_t length = atol(argv[2]);
+  if (length <= 0) {
+    printf("ERROR: Matrix length must be greater than 0\n");
+    return 1;
+  }
+
+#ifdef _OPENMP
+  printf("Number of threads    = %d\n", omp_get_max_threads());
+#endif
+  printf("Number of iterations = %d\n", iterations);
+  printf("Vector length        = %zu\n", length);
+  //printf("Offset               = %d\n", offset);
 
   //////////////////////////////////////////////////////////////////////
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  auto nstream_time = 0.0;
+  double nstream_time = 0.0;
 
-  std::vector<double> A(length);
-  std::vector<double> B(length);
-  std::vector<double> C(length);
+  size_t bytes = length*sizeof(double);
 
-  auto range = prk::range(static_cast<size_t>(0), length);
+  char * pool_path = getenv("PRK_MEMKIND_POOL_PATH");
+  if (pool_path == NULL) {
+      pool_path = "/pmem";
+  }
+  printf("MEMKIND pool path = %s\n", pool_path);
+  struct memkind * memkind_handle;
+  int err = memkind_create_pmem(pool_path, 0, &memkind_handle);
+  if (err) {
+    printf("MEMKIND failed to create a memory pool! (err=%d, errno=%d)\n", err, errno);
+  }
 
-  double scalar(3);
+  size_t usable_size = 0;
 
+  double * restrict A = memkind_malloc(memkind_handle, bytes);
+  if (A==NULL) {
+    printf("MEMKIND failed to allocate A! (errno=%d)\n", errno);
+  }
+  usable_size = memkind_malloc_usable_size(memkind_handle, A);
+  printf("A usage size = %zu\n", usable_size);
+
+  double * restrict B = memkind_malloc(memkind_handle, bytes);
+  if (B==NULL) {
+    printf("MEMKIND failed to allocate B! (errno=%d)\n", errno);
+  }
+  usable_size = memkind_malloc_usable_size(memkind_handle, B);
+  printf("B usage size = %zu\n", usable_size);
+
+  double * restrict C = memkind_malloc(memkind_handle, bytes);
+  if (C==NULL) {
+    printf("MEMKIND failed to allocate C! (errno=%d)\n", errno);
+  }
+  usable_size = memkind_malloc_usable_size(memkind_handle, C);
+  printf("C usage size = %zu\n", usable_size);
+
+  double scalar = 3.0;
+
+  OMP_PARALLEL()
   {
-#if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
-    std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-#warning GNU parallel
-    __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-    std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
-        A[i] = 0;
-        B[i] = 2;
-        C[i] = 2;
-    });
-
-    for (auto iter = 0; iter<=iterations; iter++) {
-
-      if (iter==1) nstream_time = prk::wtime();
-
-#if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
-      std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-      __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-      std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
-          A[i] += B[i] + scalar * C[i];
-      });
+    OMP_FOR_SIMD()
+    for (size_t i=0; i<length; i++) {
+      A[i] = 0.0;
+      B[i] = 2.0;
+      C[i] = 2.0;
     }
-    nstream_time = prk::wtime() - nstream_time;
+
+    for (int iter = 0; iter<=iterations; iter++) {
+
+      if (iter==1) {
+          OMP_BARRIER
+          OMP_MASTER
+          nstream_time = prk_wtime();
+      }
+
+      OMP_FOR_SIMD()
+      for (size_t i=0; i<length; i++) {
+          A[i] += B[i] + scalar * C[i];
+      }
+    }
+    OMP_BARRIER
+    OMP_MASTER
+    nstream_time = prk_wtime() - nstream_time;
   }
 
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  double ar(0);
-  double br(2);
-  double cr(2);
-  for (auto i=0; i<=iterations; i++) {
+  double ar = 0.0;
+  double br = 2.0;
+  double cr = 2.0;
+  for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
 
   ar *= length;
 
-  double asum(0);
+  double asum = 0.0;
+  OMP_PARALLEL_FOR_REDUCE( +:asum )
   for (size_t i=0; i<length; i++) {
-      asum += std::fabs(A[i]);
+      asum += fabs(A[i]);
   }
 
-  double epsilon(1.e-8);
-  if (std::fabs(ar-asum)/asum > epsilon) {
-      std::cout << "Failed Validation on output array\n"
-                << "       Expected checksum: " << ar << "\n"
-                << "       Observed checksum: " << asum << std::endl;
-      std::cout << "ERROR: solution did not validate" << std::endl;
+  double epsilon=1.e-8;
+  if (fabs(ar-asum)/asum > epsilon) {
+      printf("Failed Validation on output array\n"
+             "       Expected checksum: %lf\n"
+             "       Observed checksum: %lf\n"
+             "ERROR: solution did not validate\n", ar, asum);
       return 1;
   } else {
-      std::cout << "Solution validates" << std::endl;
+      printf("Solution validates\n");
       double avgtime = nstream_time/iterations;
       double nbytes = 4.0 * length * sizeof(double);
-      std::cout << "Rate (MB/s): " << 1.e-6*nbytes/avgtime
-                << " Avg time (s): " << avgtime << std::endl;
+      printf("Rate (MB/s): %lf Avg time (s): %lf\n", 1.e-6*nbytes/avgtime, avgtime);
+  }
+
+  memkind_free(memkind_handle, A);
+  memkind_free(memkind_handle, B);
+  memkind_free(memkind_handle, C);
+
+  err = memkind_destroy_kind(memkind_handle);
+  if (err) {
+      printf("MEMKIND failed to create destroy a memory pool! (err=%d, errno=%d)\n", err, errno);
   }
 
   return 0;

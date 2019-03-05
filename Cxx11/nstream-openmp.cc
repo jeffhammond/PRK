@@ -63,17 +63,14 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
-#include "prk_pstl.h"
-
-// See ParallelSTL.md for important information.
 
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
-  std::cout << "C++17/PSTL STREAM triad: A = B + scalar * C" << std::endl;
+#ifdef _OPENMP
+  std::cout << "C++11/OpenMP STREAM triad: A = B + scalar * C" << std::endl;
 #else
-  std::cout << "C++11/STL STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++11 STREAM triad: A = B + scalar * C" << std::endl;
 #endif
 
   //////////////////////////////////////////////////////////////////////
@@ -107,6 +104,9 @@ int main(int argc, char * argv[])
     return 1;
   }
 
+#ifdef _OPENMP
+  std::cout << "Number of threads    = " << omp_get_max_threads() << std::endl;
+#endif
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Vector length        = " << length << std::endl;
   std::cout << "Offset               = " << offset << std::endl;
@@ -117,44 +117,36 @@ int main(int argc, char * argv[])
 
   auto nstream_time = 0.0;
 
-  std::vector<double> A(length);
-  std::vector<double> B(length);
-  std::vector<double> C(length);
+  double * RESTRICT A = new double[length];
+  double * RESTRICT B = new double[length];
+  double * RESTRICT C = new double[length];
 
-  auto range = prk::range(static_cast<size_t>(0), length);
+  double scalar = 3.0;
 
-  double scalar(3);
-
+  OMP_PARALLEL()
   {
-#if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
-    std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-#warning GNU parallel
-    __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-    std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
-        A[i] = 0;
-        B[i] = 2;
-        C[i] = 2;
-    });
+    OMP_FOR_SIMD
+    for (size_t i=0; i<length; i++) {
+      A[i] = 0.0;
+      B[i] = 2.0;
+      C[i] = 2.0;
+    }
 
     for (auto iter = 0; iter<=iterations; iter++) {
 
-      if (iter==1) nstream_time = prk::wtime();
+      if (iter==1) {
+          OMP_BARRIER
+          OMP_MASTER
+          nstream_time = prk::wtime();
+      }
 
-#if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
-      std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-      __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-      std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
+      OMP_FOR_SIMD
+      for (size_t i=0; i<length; i++) {
           A[i] += B[i] + scalar * C[i];
-      });
+      }
     }
+    OMP_BARRIER
+    OMP_MASTER
     nstream_time = prk::wtime() - nstream_time;
   }
 
@@ -172,11 +164,12 @@ int main(int argc, char * argv[])
   ar *= length;
 
   double asum(0);
+  OMP_PARALLEL_FOR_REDUCE( +:asum )
   for (size_t i=0; i<length; i++) {
       asum += std::fabs(A[i]);
   }
 
-  double epsilon(1.e-8);
+  double epsilon=1.e-8;
   if (std::fabs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << "       Expected checksum: " << ar << "\n"
