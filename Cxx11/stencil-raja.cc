@@ -61,30 +61,23 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
-#ifdef _OPENMP
-#include "stencil_openmp.hpp"
-#else
-#include "stencil_seq.hpp"
-#endif
+#include "prk_raja.h"
+#include "stencil_rajaview.hpp"
 
-void nothing(const int n, const int t, std::vector<double> & in, std::vector<double> & out)
+void nothing(const int n, const int t, matrix & in, matrix & out)
 {
     std::cout << "You are trying to use a stencil that does not exist.\n";
     std::cout << "Please generate the new stencil using the code generator\n";
     std::cout << "and add it to the case-switch in the driver." << std::endl;
     // n will never be zero - this is to silence compiler warnings.
-    if (n==0 || t==0) std::cout << in.size() << out.size() << std::endl;
+    //if (n==0 || t==0) std::cout << in.size() << out.size() << std::endl;
     std::abort();
 }
 
 int main(int argc, char* argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#ifdef _OPENMP
-  std::cout << "C++11/OpenMP Stencil execution on 2D grid" << std::endl;
-#else
-  std::cout << "C++11 Stencil execution on 2D grid" << std::endl;
-#endif
+  std::cout << "C++11/RAJA Stencil execution on 2D grid" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   // Process and test input parameters
@@ -141,9 +134,6 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-#ifdef _OPENMP
-  std::cout << "Number of threads    = " << omp_get_max_threads() << std::endl;
-#endif
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Grid size            = " << n << std::endl;
   std::cout << "Tile size            = " << tile_size << std::endl;
@@ -175,51 +165,39 @@ int main(int argc, char* argv[])
 
   auto stencil_time = 0.0;
 
-  std::vector<double> in(n*n);
-  std::vector<double> out(n*n);
+  double * RESTRICT imem = new double[n*n];
+  double * RESTRICT omem = new double[n*n];
 
-  OMP_PARALLEL()
-  {
-    OMP_FOR( collapse(2) )
-    for (auto it=0; it<n; it+=tile_size) {
-      for (auto jt=0; jt<n; jt+=tile_size) {
-        for (auto i=it; i<std::min(n,it+tile_size); i++) {
-          OMP_SIMD
-          for (auto j=jt; j<std::min(n,jt+tile_size); j++) {
-            in[i*n+j] = static_cast<double>(i+j);
-            out[i*n+j] = 0.0;
-          }
-        }
-      }
-    }
+  RAJA::View<double, RAJA::Layout<2>> in(imem, n, n);
+  RAJA::View<double, RAJA::Layout<2>> out(omem, n, n);
 
-    for (auto iter = 0; iter<=iterations; iter++) {
+  using regular_policy = RAJA::KernelPolicy< RAJA::statement::For<0, thread_exec,
+                                             RAJA::statement::For<1, RAJA::simd_exec,
+                                             RAJA::statement::Lambda<0> > > >;
+  using permute_policy = RAJA::KernelPolicy< RAJA::statement::For<1, thread_exec,
+                                             RAJA::statement::For<0, RAJA::simd_exec,
+                                             RAJA::statement::Lambda<0> > > >;
 
-      if (iter==1) {
-          OMP_BARRIER
-          OMP_MASTER
-          stencil_time = prk::wtime();
-      }
+  RAJA::RangeSegment range(0, n);
+  auto grid = RAJA::make_tuple(range, range);
 
-      // Apply the stencil operator
-      stencil(n, tile_size, in, out);
-      // Add constant to solution to force refresh of neighbor data, if any
-      OMP_FOR( collapse(2) )
-      for (auto it=0; it<n; it+=tile_size) {
-        for (auto jt=0; jt<n; jt+=tile_size) {
-          for (auto i=it; i<std::min(n,it+tile_size); i++) {
-            PRAGMA_SIMD
-            for (auto j=jt; j<std::min(n,jt+tile_size); j++) {
-              in[i*n+j] += 1.0;
-            }
-          }
-        }
-      }
-    }
-    OMP_BARRIER
-    OMP_MASTER
-    stencil_time = prk::wtime() - stencil_time;
+  RAJA::kernel<regular_policy>(grid, [=](int i, int j) {
+      in(i,j)  = static_cast<double>(i+j);
+      out(i,j) = 0.0;
+  });
+
+  for (auto iter = 0; iter<=iterations; iter++) {
+
+    if (iter==1) stencil_time = prk::wtime();
+    // Apply the stencil operator
+    stencil(n, tile_size, in, out);
+    // Add constant to solution to force refresh of neighbor data, if any
+    RAJA::kernel<regular_policy>(grid, [=](int i, int j) {
+        in(i,j) += 1.0;
+    });
   }
+
+  stencil_time = prk::wtime() - stencil_time;
 
   //////////////////////////////////////////////////////////////////////
   // Analyze and output results.
@@ -229,14 +207,19 @@ int main(int argc, char* argv[])
   size_t active_points = static_cast<size_t>(n-2*radius)*static_cast<size_t>(n-2*radius);
 
   // compute L1 norm in parallel
-  double norm = 0.0;
-  OMP_PARALLEL_FOR_REDUCE( +:norm )
-  for (auto i=radius; i<n-radius; i++) {
-    for (auto j=radius; j<n-radius; j++) {
-      norm += std::fabs(out[i*n+j]);
-    }
-  }
-  norm /= active_points;
+#if 0
+  // This leads to incorrect computation of the norm.
+  RAJA::ReduceSum<RAJA::omp_reduce, double> reduced_norm(0.0);
+  RAJA::forallN<RAJA::NestedPolicy<RAJA::ExecList<thread_exec, RAJA::simd_exec>>>
+#else
+  RAJA::ReduceSum<RAJA::seq_reduce, double> reduced_norm(0.0);
+  RAJA::forallN<RAJA::NestedPolicy<RAJA::ExecList<RAJA::seq_exec, RAJA::seq_exec>>>
+#endif
+          ( RAJA::RangeSegment(radius,n-radius), RAJA::RangeSegment(radius,n-radius),
+            [&](RAJA::Index_type i, RAJA::Index_type j) {
+      reduced_norm += std::fabs(out(i,j));
+  });
+  double norm = reduced_norm / active_points;
 
   // verify correctness
   const double epsilon = 1.0e-8;

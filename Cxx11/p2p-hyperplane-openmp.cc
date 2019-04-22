@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 
   auto pipeline_time = 0.0; // silence compiler warning
 
-  double * grid = new double[n*n];
+  double * RESTRICT grid = new double[n*n];
 
   OMP_PARALLEL()
   {

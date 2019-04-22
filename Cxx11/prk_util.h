@@ -64,13 +64,6 @@
 #include <numeric>
 #include <algorithm>
 
-// These headers are busted with NVCC and GCC 5.4.0
-// The <future> header is busted with Cray C++ 8.6.1.
-#if !defined(__NVCC__) && !defined(_CRAYC)
-#include <thread>
-#include <future>
-#endif
-
 #include "prk_simd.h"
 
 #ifdef USE_RANGES
@@ -82,6 +75,12 @@
 #endif
 
 #define RESTRICT __restrict__
+
+#if (defined(__cplusplus) && (__cplusplus >= 201703L))
+#define PRK_UNUSED [[maybe_unused]]
+#else
+#define PRK_UNUSED
+#endif
 
 namespace prk {
 
