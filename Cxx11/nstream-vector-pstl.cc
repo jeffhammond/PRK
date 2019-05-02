@@ -71,9 +71,9 @@ int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
 #if defined(USE_PSTL)
-  std::cout << "C++17 Parallel STL STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++17/PSTL STREAM triad: A = B + scalar * C" << std::endl;
 #else
-  std::cout << "C++11 STL STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++11/STL STREAM triad: A = B + scalar * C" << std::endl;
 #endif
 
   //////////////////////////////////////////////////////////////////////
@@ -126,14 +126,11 @@ int main(int argc, char * argv[])
   double scalar(3);
 
   {
-    std::fill(A.begin(), A.end(), 0.0);
-    std::fill(B.begin(), B.end(), 2.0);
-    std::fill(C.begin(), C.end(), 2.0);
 #if 1
 # if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
     std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
 # elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
+                         && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
 # warning GNU parallel
     __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
 # else
@@ -144,6 +141,9 @@ int main(int argc, char * argv[])
         C[i] = 2;
     });
 #else
+    std::fill(A.begin(), A.end(), 0.0);
+    std::fill(B.begin(), B.end(), 2.0);
+    std::fill(C.begin(), C.end(), 2.0);
 # if 0
     auto nstream = [&] (size_t i) {
         A[i] += B[i] + scalar * C[i];
@@ -163,7 +163,7 @@ int main(int argc, char * argv[])
 # if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
       std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
 # elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
+                         && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
       __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
 # else
       std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
