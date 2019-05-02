@@ -62,7 +62,7 @@
 #include "prk_util.h"
 #include "prk_tbb.h"
 
-void SequentialSweep(int m, int n, std::vector<double> & grid)
+void SequentialSweep(int m, int n, prk::vector<double> & grid)
 {
   for (auto i=1; i<m; i++) {
     for (auto j=1; j<n; j++) {
