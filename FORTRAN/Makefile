@@ -24,7 +24,7 @@ ifeq ($(findstring ifort,$(FC)),ifort)
   ifeq ($(shell uname -s),Darwin)
     EXTRA = taskloop
   else
-    EXTRA = target coarray taskloop
+    EXTRA = taskloop target coarray
   endif
 endif
 # GCC (also matches pgfortran so PGI must come after)
@@ -90,6 +90,7 @@ dgemm-pretty: dgemm-pretty.f90
 clean:
 	-rm -f *.o
 	-rm -f *.i90
+	-rm -f *.dbg
 	-rm -f *__genmod.f90 # Intel Fortran
 	-rm -f *__genmod.mod # Intel Fortran
 	-rm -f *.optrpt
