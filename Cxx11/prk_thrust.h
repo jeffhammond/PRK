@@ -34,6 +34,7 @@
 
 #ifdef USE_THRUST
 # ifdef __NVCC__
+#  include "prk_cuda.h"
 #  include <thrust/device_vector.h>
 # elif defined(_OPENMP)
 #define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_OMP
