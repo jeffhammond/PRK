@@ -60,6 +60,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
+#include "prk_tbb.h"
 
 int main(int argc, char* argv[])
 {
@@ -111,7 +112,7 @@ int main(int argc, char* argv[])
 
   auto pipeline_time = 0.0; // silence compiler warning
 
-  std::vector<double> grid(n*n,0.0);
+  prk::vector<double> grid(n*n,0.0);
 
   // set boundary values (bottom and left side of grid)
   for (auto j=0; j<n; j++) {
