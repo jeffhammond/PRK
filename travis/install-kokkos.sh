@@ -53,8 +53,7 @@ if [ ! -d "$TRAVIS_ROOT/kokkos" ]; then
     mkdir build
     cd build
     ../generate_makefile.bash --prefix=${TRAVIS_ROOT}/kokkos \
-                              --compiler=${PRK_CXX} ${KOKKOS_BACKEND} \
-                              --make-j=2
+                              --compiler=${PRK_CXX} ${KOKKOS_BACKEND}
     make
     make install || echo "make install failed"
 else
