@@ -806,6 +806,8 @@ case "$PRK_TARGET" in
     allopenmp)
         echo "OpenMP"
         if [ "${TRAVIS_OS_NAME}" = "osx" ] && [ "${CC}" = "clang" ] ; then
+            exit
+            # THIS NEEDS TO BE FIXED
             CLANG_VERSION=3.9
             brew install llvm@$CLANG_VERSION || brew upgrade llvm@$CLANG_VERSION
             echo "CC=/usr/local/opt/llvm@${CLANG_VERSION}/bin/clang-${CLANG_VERSION} -std=c99" >> common/make.defs

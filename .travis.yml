@@ -1,4 +1,4 @@
-sudo: false
+sudo: true
 language: cpp
 python:
   - "3.5"
@@ -72,6 +72,10 @@ matrix:
     env: PRK_TARGET=allmpi
   # Clang does not support OpenMP yet and not willing to build from source.  Save this for Mac where we can Brew it.
   - os: linux
+    compiler: clang
+    env: PRK_TARGET=allopenmp
+  # Homebrew Clang OpenMP is a pain.
+  - os: osx
     compiler: clang
     env: PRK_TARGET=allopenmp
   # dealing with broken GCC on Mac not worth it here
