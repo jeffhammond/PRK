@@ -32,18 +32,36 @@
 #ifndef PRK_RAJA_H
 #define PRK_RAJA_H
 
-#ifdef USE_RAJA
-# define RAJA_ENABLE_NESTED 1
+//#ifdef USE_RAJA
+//# define RAJA_ENABLE_NESTED 1
 # include "RAJA/RAJA.hpp"
+//#endif
+
+#if defined(RAJA_ENABLE_OPENMP)
+  typedef RAJA::omp_parallel_for_exec thread_exec;
+#elif defined(RAJA_ENABLE_OPENMP_TARGET)
+  typedef RAJA::omp_target_parallel_for_exec<64> thread_exec;
+#elif defined(RAJA_ENABLE_TBB)
+  typedef RAJA::tbb_for_exec thread_exec;
+#elif defined(RAJA_ENABLE_CUDA)
+  const int CUDA_BLOCK_SIZE = 256;
+  typedef RAJA::cuda_exec<CUDA_BLOCK_SIZE> thread_exec;
+#else
+#warning No OpenMP!
+  typedef RAJA::seq_exec thread_exec;
 #endif
 
 #ifdef RAJA_ENABLE_OPENMP
-  typedef RAJA::omp_parallel_for_exec thread_exec;
   typedef RAJA::omp_reduce reduce_exec;
 #else
-  #warning No RAJA support for OpenMP!
-  typedef RAJA::seq_exec thread_exec;
+  //#warning No RAJA support for OpenMP!
   typedef RAJA::seq_reduce reduce_exec;
+#endif
+
+#if defined(RAJA_ENABLE_CUDA)
+#define RAJA_LAMBDA [=] RAJA_DEVICE
+#else
+#define RAJA_LAMBDA [=]
 #endif
 
 typedef RAJA::View<double, RAJA::Layout<2>> matrix;
