@@ -65,15 +65,6 @@
 #include "prk_util.h"
 #include "prk_raja.h"
 
-#if defined(RAJA_ENABLE_OPENMP)
-  typedef RAJA::omp_parallel_for_exec thread_exec;
-#elif defined(RAJA_ENABLE_TBB)
-  typedef RAJA::tbb_for_exec thread_exec;
-#else
-#warning No OpenMP!
-  typedef RAJA::seq_exec thread_exec;
-#endif
-
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
