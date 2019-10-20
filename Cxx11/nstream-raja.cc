@@ -65,15 +65,6 @@
 #include "prk_util.h"
 #include "prk_raja.h"
 
-#if defined(RAJA_ENABLE_OPENMP)
-  typedef RAJA::omp_parallel_for_exec thread_exec;
-#elif defined(RAJA_ENABLE_TBB)
-  typedef RAJA::tbb_for_exec thread_exec;
-#else
-#warning No OpenMP!
-  typedef RAJA::seq_exec thread_exec;
-#endif
-
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
@@ -133,8 +124,8 @@ int main(int argc, char * argv[])
   double scalar(3);
 
   {
-    //RAJA::forall<thread_exec>(0, length, [=](RAJA::Index_type i) {
-    RAJA::forall<thread_exec>(range, [=](RAJA::Index_type i) {
+    //RAJA::forall<thread_exec>(0, length, RAJA_LAMBDA (RAJA::Index_type i) {
+    RAJA::forall<thread_exec>(range, RAJA_LAMBDA (RAJA::Index_type i) {
         A(i) = 0.0;
         B(i) = 2.0;
         C(i) = 2.0;
@@ -144,8 +135,8 @@ int main(int argc, char * argv[])
 
       if (iter==1) nstream_time = prk::wtime();
 
-      //RAJA::forall<thread_exec>(0, length, [=](RAJA::Index_type i) {
-      RAJA::forall<thread_exec>(range, [=](RAJA::Index_type i) {
+      //RAJA::forall<thread_exec>(0, length, RAJA_LAMBDA (RAJA::Index_type i) {
+      RAJA::forall<thread_exec>(range, RAJA_LAMBDA (RAJA::Index_type i) {
           A(i) += B(i) + scalar * C(i);
       });
     }
