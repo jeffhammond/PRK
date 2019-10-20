@@ -95,8 +95,8 @@ RANGEFLAG=-DUSE_BOOST_IRANGE ${BOOSTFLAG}
 PSTLFLAG=${OPENMPSIMDFLAG} ${TBBFLAG} -DUSE_INTEL_PSTL -I./pstl/include ${RANGEFLAG} -Wno-\#pragma-messages
 KOKKOSDIR=${HOME}/KOKKOS/install-cuda
 KOKKOSFLAG=-I${KOKKOSDIR}/include -L${KOKKOSDIR}/lib64 -lkokkoscore
-RAJADIR=
-RAJAFLAG=-I${RAJADIR}/include -L${RAJADIR}/lib -lRAJA ${OPENMPFLAG} ${TBBFLAG}
+RAJADIR=/home/jrhammon/RAJA/install-cuda
+RAJAFLAG=-I${RAJADIR}/include -L${RAJADIR}/lib -lRAJA #${OPENMPFLAG} ${TBBFLAG}
 THRUSTDIR=/usr/local/cuda-10.1/targets/ppc64le-linux/include
 THRUSTFLAG=-I${THRUSTDIR}
 #
@@ -121,6 +121,8 @@ CBLASFLAG=-DESSL
 # Linux w/ NVIDIA CUDA
 NVCC=/usr/local/cuda-10.1/bin/nvcc
 CUDAFLAGS=-g -O3 -std=c++11
+CUDAFLAGS+=-x cu
+CUDAFLAGS+=-ccbin ${CXX}
 CUDAFLAGS+=--expt-extended-lambda
 CUDAFLAGS+=-arch=sm_70
 CUDAFLAGS+=-Xcudafe --diag_suppress=esa_on_defaulted_function_ignored
