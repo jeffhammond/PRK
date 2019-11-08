@@ -112,8 +112,8 @@ def codegen(src,pattern,stencil_size,radius,W,model):
     elif (model=='raja'):
         src.write('void '+pattern+str(radius)+'(const int n, const int t, std::vector<double> & in, std::vector<double> & out) {\n')
         src.write('    RAJA::RangeSegment inside('+str(radius)+',n-'+str(radius)+');\n')
-        src.write('    RAJA::forall<thread_exec>(inside, [&](RAJA::Index_type i) {\n')
-        src.write('      RAJA::forall<RAJA::simd_exec>(inside, [&](RAJA::Index_type j) {\n')
+        src.write('    RAJA::forall<thread_exec>(inside, RAJA_LAMBDA (RAJA::Index_type i) {\n')
+        src.write('      RAJA::forall<RAJA::simd_exec>(inside, RAJA_LAMBDA (RAJA::Index_type j) {\n')
         bodygen(src,pattern,stencil_size,radius,W,model)
         src.write('      });\n')
         src.write('    });\n')
@@ -121,7 +121,7 @@ def codegen(src,pattern,stencil_size,radius,W,model):
         src.write('void '+pattern+str(radius)+'(const int n, const int t, matrix & in, matrix & out) {\n')
         src.write('    RAJA::RangeSegment inner1('+str(radius)+',n-'+str(radius)+');\n')
         src.write('    auto inner2 = RAJA::make_tuple(inner1, inner1);\n')
-        src.write('    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {\n')
+        src.write('    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {\n')
         bodygen(src,pattern,stencil_size,radius,W,model)
         src.write('    });\n')
     elif (model=='tbb'):

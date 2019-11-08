@@ -1,11 +1,7 @@
-using regular_policy = RAJA::KernelPolicy< RAJA::statement::For<0, thread_exec,
-                                           RAJA::statement::For<1, RAJA::simd_exec,
-                                           RAJA::statement::Lambda<0> > > >;
-
 void star1(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(1,n-1);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i,j-1) * -0.5
                           +in(i-1,j) * -0.5
                           +in(i+1,j) * 0.5
@@ -16,7 +12,7 @@ void star1(const int n, const int t, matrix & in, matrix & out) {
 void star2(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(2,n-2);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i,j-2) * -0.125
                           +in(i,j-1) * -0.25
                           +in(i-2,j) * -0.125
@@ -31,7 +27,7 @@ void star2(const int n, const int t, matrix & in, matrix & out) {
 void star3(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(3,n-3);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i,j-3) * -0.0555555555556
                           +in(i,j-2) * -0.0833333333333
                           +in(i,j-1) * -0.166666666667
@@ -50,7 +46,7 @@ void star3(const int n, const int t, matrix & in, matrix & out) {
 void star4(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(4,n-4);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i,j-4) * -0.03125
                           +in(i,j-3) * -0.0416666666667
                           +in(i,j-2) * -0.0625
@@ -73,7 +69,7 @@ void star4(const int n, const int t, matrix & in, matrix & out) {
 void star5(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(5,n-5);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i,j-5) * -0.02
                           +in(i,j-4) * -0.025
                           +in(i,j-3) * -0.0333333333333
@@ -100,7 +96,7 @@ void star5(const int n, const int t, matrix & in, matrix & out) {
 void grid1(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(1,n-1);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i-1,j-1) * -0.25
                           +in(i,j-1) * -0.25
                           +in(i-1,j) * -0.25
@@ -114,7 +110,7 @@ void grid1(const int n, const int t, matrix & in, matrix & out) {
 void grid2(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(2,n-2);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i-2,j-2) * -0.0625
                           +in(i-1,j-2) * -0.0208333333333
                           +in(i,j-2) * -0.0208333333333
@@ -142,7 +138,7 @@ void grid2(const int n, const int t, matrix & in, matrix & out) {
 void grid3(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(3,n-3);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i-3,j-3) * -0.0277777777778
                           +in(i-2,j-3) * -0.00555555555556
                           +in(i-1,j-3) * -0.00555555555556
@@ -192,7 +188,7 @@ void grid3(const int n, const int t, matrix & in, matrix & out) {
 void grid4(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(4,n-4);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i-4,j-4) * -0.015625
                           +in(i-3,j-4) * -0.00223214285714
                           +in(i-2,j-4) * -0.00223214285714
@@ -272,7 +268,7 @@ void grid4(const int n, const int t, matrix & in, matrix & out) {
 void grid5(const int n, const int t, matrix & in, matrix & out) {
     RAJA::RangeSegment inner1(5,n-5);
     auto inner2 = RAJA::make_tuple(inner1, inner1);
-    RAJA::kernel<regular_policy>(inner2, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(inner2, RAJA_LAMBDA (int i, int j) {
               out(i,j) += +in(i-5,j-5) * -0.01
                           +in(i-4,j-5) * -0.00111111111111
                           +in(i-3,j-5) * -0.00111111111111

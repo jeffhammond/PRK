@@ -55,7 +55,7 @@
 #include "prk_util.h"
 #include "prk_cuda.h"
 
-#define CUBLAS_AXPY_BUG 1
+#define CUBLAS_AXPY_BUG 0
 
 int main(int argc, char * argv[])
 {

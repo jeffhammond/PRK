@@ -60,8 +60,20 @@
 
 #if defined(RAJA_ENABLE_CUDA)
 #define RAJA_LAMBDA [=] RAJA_DEVICE
+using regular_policy = RAJA::KernelPolicy< RAJA::statement::For<0, RAJA::cuda_exec<CUDA_BLOCK_SIZE>,
+                                           RAJA::statement::For<1, RAJA::cuda_exec<CUDA_BLOCK_SIZE>,
+                                           RAJA::statement::Lambda<0> > > >;
+using permute_policy = RAJA::KernelPolicy< RAJA::statement::For<1, RAJA::cuda_exec<CUDA_BLOCK_SIZE>,
+                                           RAJA::statement::For<0, RAJA::cuda_exec<CUDA_BLOCK_SIZE>,
+                                           RAJA::statement::Lambda<0> > > >;
 #else
 #define RAJA_LAMBDA [=]
+using regular_policy = RAJA::KernelPolicy< RAJA::statement::For<0, thread_exec,
+                                           RAJA::statement::For<1, RAJA::simd_exec,
+                                           RAJA::statement::Lambda<0> > > >;
+using permute_policy = RAJA::KernelPolicy< RAJA::statement::For<1, thread_exec,
+                                           RAJA::statement::For<0, RAJA::simd_exec,
+                                           RAJA::statement::Lambda<0> > > >;
 #endif
 
 typedef RAJA::View<double, RAJA::Layout<2>> matrix;

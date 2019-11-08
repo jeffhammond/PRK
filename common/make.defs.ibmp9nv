@@ -11,7 +11,7 @@ CC=xlc_r -qlanglvl=stdc99
 FC=xlf2008_r
 XLFPP=-WF,
 # C++11 may not be required but does no harm here.
-CXX=xlc++_r -qlanglvl=extended1y
+CXX=xlc++_r #-qlanglvl=extended1y
 #
 # Compiler flags
 #
@@ -96,7 +96,9 @@ PSTLFLAG=${OPENMPSIMDFLAG} ${TBBFLAG} -DUSE_INTEL_PSTL -I./pstl/include ${RANGEF
 KOKKOSDIR=${HOME}/KOKKOS/install-cuda
 KOKKOSFLAG=-I${KOKKOSDIR}/include -L${KOKKOSDIR}/lib64 -lkokkoscore
 RAJADIR=/home/jrhammon/RAJA/install-cuda
-RAJAFLAG=-I${RAJADIR}/include -L${RAJADIR}/lib -lRAJA #${OPENMPFLAG} ${TBBFLAG}
+RAJAFLAG=-I${RAJADIR}/include -L${RAJADIR}/lib -lRAJA
+RAJAFLAG+=-DPRK_RAJA_BACKEND=Cuda
+#RAJAFLAG+=${OPENMPFLAG} ${TBBFLAG
 THRUSTDIR=/usr/local/cuda-10.1/targets/ppc64le-linux/include
 THRUSTFLAG=-I${THRUSTDIR}
 #

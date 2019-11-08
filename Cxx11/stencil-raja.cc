@@ -181,7 +181,7 @@ int main(int argc, char* argv[])
   RAJA::RangeSegment range(0, n);
   auto grid = RAJA::make_tuple(range, range);
 
-  RAJA::kernel<regular_policy>(grid, [=](int i, int j) {
+  RAJA::kernel<regular_policy>(grid, RAJA_LAMBDA (int i, int j) {
       in(i,j)  = static_cast<double>(i+j);
       out(i,j) = 0.0;
   });
@@ -192,7 +192,7 @@ int main(int argc, char* argv[])
     // Apply the stencil operator
     stencil(n, tile_size, in, out);
     // Add constant to solution to force refresh of neighbor data, if any
-    RAJA::kernel<regular_policy>(grid, [=](int i, int j) {
+    RAJA::kernel<regular_policy>(grid, RAJA_LAMBDA (int i, int j) {
         in(i,j) += 1.0;
     });
   }

@@ -115,13 +115,6 @@ int main(int argc, char * argv[])
   matrix A(Amem, order, order);
   matrix B(Bmem, order, order);
 
-  using regular_policy = RAJA::KernelPolicy< RAJA::statement::For<0, thread_exec,
-                                             RAJA::statement::For<1, RAJA::simd_exec,
-                                             RAJA::statement::Lambda<0> > > >;
-  using permute_policy = RAJA::KernelPolicy< RAJA::statement::For<1, thread_exec,
-                                             RAJA::statement::For<0, RAJA::simd_exec,
-                                             RAJA::statement::Lambda<0> > > >;
-
   RAJA::RangeSegment range(0, order);
   auto range2d = RAJA::make_tuple(range, range);
 

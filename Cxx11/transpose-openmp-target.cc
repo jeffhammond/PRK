@@ -129,9 +129,10 @@ int main(int argc, char * argv[])
 
       // transpose the  matrix
       if (tile_size < order) {
-        OMP_TARGET( teams distribute parallel for simd collapse(2) )
+        OMP_TARGET( teams distribute parallel for collapse(2) )
         for (int it=0; it<order; it+=tile_size) {
           for (int jt=0; jt<order; jt+=tile_size) {
+            OMP( parallel for simd collapse(2) schedule(static,1)  )
             for (int i=it; i<MIN(order,it+tile_size); i++) {
               for (int j=jt; j<MIN(order,jt+tile_size); j++) {
                 B[i*order+j] += A[j*order+i];

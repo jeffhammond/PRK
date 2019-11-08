@@ -190,8 +190,13 @@ nstream-opencl: nstream-opencl.cc nstream.cl prk_util.h prk_opencl.h
 %-boost-compute: %-boost-compute.cc prk_util.h
 	$(CXX) $(CXXFLAGS) $< $(BOOSTFLAGS) $(OPENCLFLAGS) -o $@
 
+ifeq ($(PRK_RAJA_BACKEND),Cuda)
+%-raja: %-raja.cc prk_util.h prk_raja.h
+	$(NVCC) $(CPPFLAGS) $(CUDAFLAGS) $< $(RAJAFLAGS) -o $@
+else
 %-raja: %-raja.cc prk_util.h
 	$(CXX) $(CXXFLAGS) $< $(RAJAFLAGS) -o $@
+endif
 
 ifeq ($(PRK_KOKKOS_BACKEND),Cuda)
 %-kokkos: %-kokkos.cc prk_util.h
