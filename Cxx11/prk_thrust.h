@@ -36,11 +36,11 @@
 # ifdef __NVCC__
 #  include <thrust/device_vector.h>
 # elif defined(_OPENMP)
-#define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_OMP
+#  define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_OMP
 #  include <thrust/system/omp/execution_policy.h>
 //#  include <thrust/system/omp/vector.h>
-#else
-#define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_CPP
+# else
+#  define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_CPP
 #  include <thrust/system/omp/execution_policy.h>
 //#  include <thrust/system/cpp/vector.h>
 # endif
