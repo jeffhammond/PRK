@@ -141,17 +141,17 @@ void run(sycl::queue & q, int iterations, size_t length)
   //////////////////////////////////////////////////////////////////////
 
   double ar(0);
-  T br(2);
-  T cr(2);
+  double br(2);
+  double cr(2);
   for (int i=0; i<=iterations; ++i) {
-      ar += br + scalar * cr;
+      ar += br + static_cast<double>(scalar) * cr;
   }
 
   ar *= length;
 
   double asum(0);
   for (size_t i=0; i<length; ++i) {
-      asum += std::fabs(h_A[i]);
+      asum += static_cast<double>(std::fabs(h_A[i]));
   }
 
   const double epsilon(1.e-8);
@@ -161,6 +161,9 @@ void run(sycl::queue & q, int iterations, size_t length)
                 << "       Expected checksum: " << ar << "\n"
                 << "       Observed checksum: " << asum << std::endl;
       std::cout << "ERROR: solution did not validate" << std::endl;
+      for (size_t i=0; i<length; ++i) {
+          std::cout << h_A[i] << " (" << ar/length << ")\n";
+      }
   } else {
       std::cout << "Solution validates" << std::endl;
       double avgtime = nstream_time/iterations;

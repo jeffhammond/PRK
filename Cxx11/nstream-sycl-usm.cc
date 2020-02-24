@@ -97,9 +97,9 @@ void run(sycl::queue & q, int iterations, size_t length)
     C = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
 
     for (size_t i=0; i<length; i++) {
-      A[i] = 0.0;
-      B[i] = 2.0;
-      C[i] = 2.0;
+      A[i] = static_cast<T>(0);
+      B[i] = static_cast<T>(2);
+      C[i] = static_cast<T>(2);
     }
 
     for (int iter = 0; iter<=iterations; ++iter) {
@@ -148,17 +148,17 @@ void run(sycl::queue & q, int iterations, size_t length)
   //////////////////////////////////////////////////////////////////////
 
   double ar(0);
-  T br(2);
-  T cr(2);
+  double br(2);
+  double cr(2);
   for (int i=0; i<=iterations; ++i) {
-      ar += br + scalar * cr;
+      ar += br + static_cast<double>(scalar) * cr;
   }
 
   ar *= length;
 
   double asum(0);
   for (size_t i=0; i<length; ++i) {
-      asum += std::fabs(A[i]);
+      asum += static_cast<double>(std::fabs(A[i]));
   }
 
   const double epsilon(1.e-8);
@@ -168,6 +168,9 @@ void run(sycl::queue & q, int iterations, size_t length)
                 << "       Expected checksum: " << ar << "\n"
                 << "       Observed checksum: " << asum << std::endl;
       std::cout << "ERROR: solution did not validate" << std::endl;
+      for (size_t i=0; i<length; ++i) {
+          std::cout << A[i] << " (" << ar/length << ")\n";
+      }
   } else {
       std::cout << "Solution validates" << std::endl;
       double avgtime = nstream_time/iterations;
@@ -226,8 +229,8 @@ int main(int argc, char * argv[])
   prk::opencl::listPlatforms();
 #endif
 
-  try {
 #if SYCL_TRY_CPU_QUEUE
+  try {
     if (length<100000) {
         sycl::queue q(sycl::host_selector{});
         prk::SYCL::print_device_platform(q);
@@ -236,10 +239,22 @@ int main(int argc, char * argv[])
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
+  }
 #endif
 
     // CPU requires spir64 target
 #if SYCL_TRY_CPU_QUEUE
+  try {
     if (1) {
         sycl::queue q(sycl::cpu_selector{});
         prk::SYCL::print_device_platform(q);
@@ -249,10 +264,22 @@ int main(int argc, char * argv[])
           run<double>(q, iterations, length);
         }
     }
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
+  }
 #endif
 
     // NVIDIA GPU requires ptx64 target
 #if SYCL_TRY_GPU_QUEUE
+  try {
     if (1) {
         sycl::queue q(sycl::gpu_selector{});
         prk::SYCL::print_device_platform(q);
@@ -269,21 +296,18 @@ int main(int argc, char * argv[])
           }
         }
     }
-#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
-    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
-    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
-    return 1;
   }
+#endif
 
   return 0;
 }
