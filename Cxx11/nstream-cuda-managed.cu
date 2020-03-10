@@ -64,6 +64,8 @@
 #include "prk_util.h"
 #include "prk_cuda.h"
 
+#include <unistd.h>
+
 __global__ void nstream(const unsigned n, const prk_float scalar, prk_float * A, const prk_float * B, const prk_float * C)
 {
     unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -155,9 +157,19 @@ int main(int argc, char * argv[])
 
   const size_t bytes = length * sizeof(prk_float);
   if (system_memory) {
+#if 0
       A = new double[length];
       B = new double[length];
       C = new double[length];
+#else
+      {
+          const int pagesize = getpagesize();
+          const size_t rounded_bytes = pagesize * prk::divceil(bytes,pagesize);
+          prk::check( posix_memalign((void**)&A, pagesize, rounded_bytes) );
+          prk::check( posix_memalign((void**)&B, pagesize, rounded_bytes) );
+          prk::check( posix_memalign((void**)&C, pagesize, rounded_bytes) );
+      }
+#endif
   } else {
       prk::CUDA::check( cudaMallocManaged((void**)&A, bytes) );
       prk::CUDA::check( cudaMallocManaged((void**)&B, bytes) );
@@ -180,6 +192,7 @@ int main(int argc, char * argv[])
       prk::CUDA::check( cudaMemPrefetchAsync(A, bytes, 0) );
       prk::CUDA::check( cudaMemPrefetchAsync(B, bytes, 0) );
       prk::CUDA::check( cudaMemPrefetchAsync(C, bytes, 0) );
+      prk::CUDA::check( cudaDeviceSynchronize() );
   }
 
   prk_float scalar(3);
@@ -216,9 +229,15 @@ int main(int argc, char * argv[])
   }
 
   if (system_memory) {
+#if 0
+      delete[] A;
+      delete[] B;
+      delete[] C;
+#else
       free(A);
       free(B);
       free(C);
+#endif
   } else {
       prk::CUDA::check( cudaFree(A) );
       prk::CUDA::check( cudaFree(B) );

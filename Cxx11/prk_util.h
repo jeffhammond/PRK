@@ -84,6 +84,19 @@
 
 namespace prk {
 
+    void check(int rc)
+    {
+        if (rc==0) {
+            return;
+        } else {
+            std::string error_name;
+            if      (rc==EINVAL) error_name = "EINVAL";
+            else if (rc==ENOMEM) error_name = "ENOMEM";
+            std::cout << "PRK error: " << rc << "(" << error_name << ")" << std::endl;
+            std::abort();
+        }
+    }
+
     int get_alignment(void)
     {
         /* a := alignment */
