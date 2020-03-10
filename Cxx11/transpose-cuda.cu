@@ -125,6 +125,7 @@ int main(int argc, char * argv[])
           std::cout << "Sorry, but order (" << order << ") must be evenly divible by " << tile_dim
                     << " or the results are going to be wrong.\n";
       }
+      (void)tile_size;
 #else
       // default tile size for tiling of local transpose
       tile_size = 32;
