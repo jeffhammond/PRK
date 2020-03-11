@@ -148,10 +148,10 @@ case "$PRK_TARGET" in
         echo "EXTRA_CLIBS=-lm -lpthread" >> common/make.defs
 
         # C11 without external parallelism
-        ${MAKE} -C $PRK_TARGET_PATH p2p stencil transpose p2p-innerloop p2p-hyperplane
+        ${MAKE} -C $PRK_TARGET_PATH nstream p2p stencil transpose p2p-hyperplane
+        $PRK_TARGET_PATH/nstream         10 16777216 32
         $PRK_TARGET_PATH/p2p             10 1024 1024
         $PRK_TARGET_PATH/p2p             10 1024 1024 100 100
-        $PRK_TARGET_PATH/p2p-innerloop   10 1024
         $PRK_TARGET_PATH/p2p-hyperplane  10 1024
         $PRK_TARGET_PATH/p2p-hyperplane  10 1024 32
         $PRK_TARGET_PATH/stencil         10 1000
@@ -170,12 +170,15 @@ case "$PRK_TARGET" in
         # C11 with OpenMP
         export OMP_NUM_THREADS=2
         case "$CC" in
+            clang*)
+                echo "Skipping Clang since OpenMP support probably missing"
+                ;;
             g*)
                 # Host
                 echo "OPENMPFLAG=-fopenmp" >> common/make.defs
-                ${MAKE} -C $PRK_TARGET_PATH p2p-tasks-openmp p2p-innerloop-openmp p2p-hyperplane-openmp stencil-openmp transpose-openmp
+                ${MAKE} -C $PRK_TARGET_PATH nstream-openmp p2p-tasks-openmp p2p-hyperplane-openmp stencil-openmp transpose-openmp
+                $PRK_TARGET_PATH/nstream-openmp           10 16777216 32
                 $PRK_TARGET_PATH/p2p-tasks-openmp         10 1024 1024 100 100
-                $PRK_TARGET_PATH/p2p-innerloop-openmp     10 1024
                 $PRK_TARGET_PATH/p2p-hyperplane-openmp    10 1024
                 $PRK_TARGET_PATH/p2p-hyperplane-openmp    10 1024 32
                 $PRK_TARGET_PATH/stencil-openmp           10 1000
@@ -198,27 +201,14 @@ case "$PRK_TARGET" in
                     done
                 done
                 ;;
-            clang*)
-                # Host
-                echo "Skipping Clang since OpenMP support probably missing"
-                #echo "OPENMPFLAG=-fopenmp" >> common/make.defs
-                #${MAKE} -C $PRK_TARGET_PATH openmp
-                #$PRK_TARGET_PATH/p2p-tasks-openmp         10 1024 1024 100 100
-                #$PRK_TARGET_PATH/stencil-openmp           10 1000
-                #$PRK_TARGET_PATH/transpose-penmp          10 1024 32
-                #echo "Test stencil code generator"
-                #for s in star grid ; do
-                #    for r in 1 2 3 4 5 ; do
-                #        $PRK_TARGET_PATH/stencil-penmp 10 200 $s $r
-                #    done
-                #done
-                ;;
             ic*)
                 # Host
                 echo "OPENMPFLAG=-qopenmp" >> common/make.defs
-                ${MAKE} -C $PRK_TARGET_PATH p2p-tasks-openmp p2p-innerloop-openmp stencil-openmp transpose-openmp
+                ${MAKE} -C $PRK_TARGET_PATH nstream-openmp p2p-tasks-openmp p2p-hyperplane-openmp stencil-openmp transpose-openmp
+                $PRK_TARGET_PATH/nstream-openmp           10 16777216 32
                 $PRK_TARGET_PATH/p2p-tasks-openmp         10 1024 1024 100 100
-                $PRK_TARGET_PATH/p2p-innerloop-openmp     10 1024 1024
+                $PRK_TARGET_PATH/p2p-hyperplane-openmp    10 1024
+                $PRK_TARGET_PATH/p2p-hyperplane-openmp    10 1024 32
                 $PRK_TARGET_PATH/stencil-openmp           10 1000
                 $PRK_TARGET_PATH/transpose-openmp         10 1024 32
                 #echo "Test stencil code generator"
@@ -247,18 +237,19 @@ case "$PRK_TARGET" in
         esac
 
         # C11 with Cilk
-        if [ "${CC}" = "gcc" ] ; then
-            echo "CILKFLAG=-fcilkplus" >> common/make.defs
-            ${MAKE} -C $PRK_TARGET_PATH stencil-cilk transpose-cilk
-            $PRK_TARGET_PATH/stencil-cilk     10 1000
-            $PRK_TARGET_PATH/transpose-cilk   10 1024 32
-            #echo "Test stencil code generator"
-            for s in star grid ; do
-                for r in 1 2 3 4 5 ; do
-                    $PRK_TARGET_PATH/stencil-cilk 10 200 $s $r
-                done
-            done
-        fi
+        #if [ "${CC}" = "gcc" ] ; then
+        #    echo "CILKFLAG=-fcilkplus" >> common/make.defs
+        #    ${MAKE} -C $PRK_TARGET_PATH stencil-cilk transpose-cilk
+        #    $PRK_TARGET_PATH/stencil-cilk     10 1000
+        #    $PRK_TARGET_PATH/transpose-cilk   10 1024 32
+        #    #echo "Test stencil code generator"
+        #    for s in star grid ; do
+        #        for r in 1 2 3 4 5 ; do
+        #            $PRK_TARGET_PATH/stencil-cilk 10 200 $s $r
+        #        done
+        #    done
+        #fi
+
         # Use MUSL for GCC+Linux only
         if [ "${TRAVIS_OS_NAME}" = "linux" ] && [ "$CC" = "gcc" ] ; then
             ${MAKE} -C $PRK_TARGET_PATH clean
@@ -482,18 +473,16 @@ case "$PRK_TARGET" in
         esac
 
         # Boost.Compute runs after OpenCL, and only available in Travis with MacOS.
-        #case "$os" in
-        #    FreeBSD)
-        #        echo "BOOSTFLAG=-DUSE_BOOST -I/usr/local/include" >> common/make.defs
-        #        echo "RANGEFLAG=-DUSE_BOOST_IRANGE -I/usr/local/include" >> common/make.defs
-        #        ;;
-        #    *)
-        #        echo "BOOSTFLAG=-DUSE_BOOST" >> common/make.defs
-        #        echo "RANGEFLAG=-DUSE_RANGES_TS -I${TRAVIS_ROOT}/range-v3/include" >> common/make.defs
-        #        ;;
-        #esac
-        echo "BOOSTFLAG=-DUSE_BOOST" >> common/make.defs
-        echo "RANGEFLAG=-DUSE_BOOST_IRANGE" >> common/make.defs
+        case "$os" in
+            FreeBSD)
+                echo "BOOSTFLAG=-I/usr/local/include" >> common/make.defs
+                echo "RANGEFLAG=-DUSE_BOOST_IRANGE -I/usr/local/include" >> common/make.defs
+                ;;
+            *)
+                echo "BOOSTFLAG=-I/usr/include" >> common/make.defs
+                echo "RANGEFLAG=-DUSE_RANGES_TS -I${TRAVIS_ROOT}/range-v3/include" >> common/make.defs
+                ;;
+        esac
 
         # C++11 with rangefor and Boost.Ranges
         ${MAKE} -C $PRK_TARGET_PATH rangefor
@@ -852,16 +841,17 @@ case "$PRK_TARGET" in
     allopenmp)
         echo "OpenMP"
         if [ "${TRAVIS_OS_NAME}" = "osx" ] && [ "${CC}" = "clang" ] ; then
-            CLANG_VERSION=3.9
-            brew install llvm@$CLANG_VERSION || brew upgrade llvm@$CLANG_VERSION
-            echo "CC=/usr/local/opt/llvm@${CLANG_VERSION}/bin/clang-${CLANG_VERSION} -std=c99" >> common/make.defs
+            brew install llvm || brew upgrade llvm
+            LLVMPATH="$(brew --cellar llvm)/$(brew list --versions llvm | tr ' ' '\n' | tail -1)"
+            echo "LLVMPATH=${LLVMPATH}"
+            echo "CC=${LLVMPATH}/bin/clang -std=c99" >> common/make.defs
             echo "OPENMPFLAG=-fopenmp" \
-                            " -L/usr/local/opt/llvm@$CLANG_VERSION/lib -lomp" \
-                            " /usr/local/opt/llvm@$CLANG_VERSION/lib/libomp.dylib" \
-                            " -Wl,-rpath -Wl,/usr/local/opt/llvm@$CLANG_VERSION/lib" >> common/make.defs
-            export LD_RUN_PATH=/usr/local/opt/llvm@$CLANG_VERSION/lib:$LD_RUN_PATH
-            export LD_LIBRARY_PATH=/usr/local/opt/llvm@$CLANG_VERSION/lib:$LD_LIBRARY_PATH
-            export DYLD_LIBRARY_PATH=/usr/local/opt/llvm@$CLANG_VERSION/lib:$DYLD_LIBRARY_PATH
+                            " -L${LLVMPATH}/lib -lomp" \
+                            " ${LLVMPATH}/lib/libomp.dylib" \
+                            " -Wl,-rpath -Wl,${LLVMPATH}/lib" >> common/make.defs
+            export LD_RUN_PATH=${LLVMPATH}/lib:$LD_RUN_PATH
+            export LD_LIBRARY_PATH=${LLVMPATH}/lib:$LD_LIBRARY_PATH
+            export DYLD_LIBRARY_PATH=${LLVMPATH}/lib:$DYLD_LIBRARY_PATH
         else
             echo "CC=$CC -std=c99" >> common/make.defs
             echo "OPENMPFLAG=-fopenmp" >> common/make.defs

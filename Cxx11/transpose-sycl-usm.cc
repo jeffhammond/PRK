@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2017, Intel Corporation
+/// Copyright (c) 2013, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -31,87 +31,79 @@
 
 //////////////////////////////////////////////////////////////////////
 ///
-/// NAME:    nstream
+/// NAME:    transpose
 ///
-/// PURPOSE: To compute memory bandwidth when adding a vector of a given
-///          number of double precision values to the scalar multiple of
-///          another vector of the same length, and storing the result in
-///          a third vector.
+/// PURPOSE: This program measures the time for the transpose of a
+///          column-major stored matrix into a row-major stored matrix.
 ///
-/// USAGE:   The program takes as input the number
-///          of iterations to loop over the triad vectors, the length of the
-///          vectors, and the offset between vectors
+/// USAGE:   Program input is the matrix order and the number of times to
+///          repeat the operation:
 ///
-///          <progname> <# iterations> <vector length> <offset>
+///          transpose <matrix_size> <# iterations>
 ///
 ///          The output consists of diagnostics to make sure the
-///          algorithm worked, and of timing statistics.
+///          transpose worked and timing statistics.
 ///
-/// NOTES:   Bandwidth is determined as the number of words read, plus the
-///          number of words written, times the size of the words, divided
-///          by the execution time. For a vector length of N, the total
-///          number of words read and written is 4*N*sizeof(double).
-///
-///
-/// HISTORY: This code is loosely based on the Stream benchmark by John
-///          McCalpin, but does not follow all the Stream rules. Hence,
-///          reported results should not be associated with Stream in
-///          external publications
-///
-///          Converted to C++11 by Jeff Hammond, November 2017.
+/// HISTORY: Written by  Rob Van der Wijngaart, February 2009.
+///          Converted to C++11 by Jeff Hammond, February 2016 and May 2017.
 ///
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_sycl.h"
 #include "prk_util.h"
 
-template <typename T> class nstream;
+template <typename T> class transpose;
 
 template <typename T>
-void run(sycl::queue & q, int iterations, size_t length)
+void run(sycl::queue & q, int iterations, size_t order)
 {
   //////////////////////////////////////////////////////////////////////
-  // Allocate space and perform the computation
+  // Allocate space for the input and transpose matrix
   //////////////////////////////////////////////////////////////////////
 
-  double nstream_time(0);
+  double trans_time(0);
 
-  const T scalar(3);
+  auto ctx = q.get_context();
+  auto dev = q.get_device();
 
-  std::vector<T> h_A(length,0);
-  std::vector<T> h_B(length,2);
-  std::vector<T> h_C(length,2);
+  T * A = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
+  T * B = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
+
+  for (auto i=0;i<order; i++) {
+    for (auto j=0;j<order;j++) {
+      A[i*order+j] = static_cast<double>(i*order+j);
+      B[i*order+j] = 0.0;
+    }
+  }
 
   try {
 
-    auto ctx = q.get_context();
-
 #if PREBUILD_KERNEL
     sycl::program kernel(ctx);
-    kernel.build_with_kernel_type<nstream<T>>();
+    kernel.build_with_kernel_type<transpose<T>>();
 #endif
 
-    sycl::buffer<T,1> d_A { h_A.data(), sycl::range<1>(h_A.size()) };
-    sycl::buffer<T,1> d_B { h_B.data(), sycl::range<1>(h_B.size()) };
-    sycl::buffer<T,1> d_C { h_C.data(), sycl::range<1>(h_C.size()) };
 
     for (int iter = 0; iter<=iterations; ++iter) {
 
-      if (iter==1) nstream_time = prk::wtime();
+      if (iter==1) trans_time = prk::wtime();
 
       q.submit([&](sycl::handler& h) {
 
-        auto A = d_A.template get_access<sycl::access::mode::read_write>(h);
-        auto B = d_B.template get_access<sycl::access::mode::read>(h);
-        auto C = d_C.template get_access<sycl::access::mode::read>(h);
-
-        h.parallel_for<class nstream<T>>(
+        h.parallel_for<class transpose<T>>(
 #if PREBUILD_KERNEL
-                kernel.get_kernel<nstream<T>>(),
+                kernel.get_kernel<transpose<T>>(),
 #endif
-                sycl::range<1>{length}, [=] (sycl::id<1> it) {
-            const size_t i = it[0];
-            A[i] += B[i] + scalar * C[i];
+                sycl::range<2>{order,order}, [=] (sycl::id<2> it) {
+#if USE_2D_INDEXING
+          sycl::id<2> ij{it[0],it[1]};
+          sycl::id<2> ji{it[1],it[0]};
+          B[ij] += A[ji];
+          A[ji] += (T)1;
+#else
+          B[it[0] * order + it[1]] += A[it[1] * order + it[0]];
+          A[it[1] * order + it[0]] += (T)1;
+#endif
         });
       });
       q.wait();
@@ -120,7 +112,7 @@ void run(sycl::queue & q, int iterations, size_t length)
     // Stop timer before buffer+accessor destructors fire,
     // since that will move data, and we do not time that
     // for other device-oriented programming models.
-    nstream_time = prk::wtime() - nstream_time;
+    trans_time = prk::wtime() - trans_time;
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
@@ -136,70 +128,71 @@ void run(sycl::queue & q, int iterations, size_t length)
     return;
   }
 
+  sycl::free(A, ctx);
+  sycl::free(B, ctx);
+
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  double ar(0);
-  T br(2);
-  T cr(2);
-  for (int i=0; i<=iterations; ++i) {
-      ar += br + scalar * cr;
+  // TODO: replace with std::generate, std::accumulate, or similar
+  const T addit = (iterations+1.) * (iterations/2.);
+  double abserr(0);
+  for (size_t i=0; i<order; ++i) {
+    for (size_t j=0; j<order; ++j) {
+      size_t const ij = i*order+j;
+      size_t const ji = j*order+i;
+      const T reference = static_cast<T>(ij)*(1.+iterations)+addit;
+      abserr += std::fabs(B[ji] - reference);
+    }
   }
 
-  ar *= length;
+#ifdef VERBOSE
+  std::cout << "Sum of absolute differences: " << abserr << std::endl;
+#endif
 
-  double asum(0);
-  for (size_t i=0; i<length; ++i) {
-      asum += std::fabs(h_A[i]);
-  }
-
-  const double epsilon(1.e-8);
-  if (std::fabs(ar-asum)/asum > epsilon) {
-      std::cout << "Failed Validation on output array\n"
-                << std::setprecision(16)
-                << "       Expected checksum: " << ar << "\n"
-                << "       Observed checksum: " << asum << std::endl;
-      std::cout << "ERROR: solution did not validate" << std::endl;
+  const double epsilon(1.0e-8);
+  if (abserr < epsilon) {
+    std::cout << "Solution validates" << std::endl;
+    double avgtime = trans_time/iterations;
+    double bytes = (size_t)order * (size_t)order * sizeof(T);
+    std::cout << 8*sizeof(T) << "B "
+              << "Rate (MB/s): " << 1.0e-6 * (2.*bytes)/avgtime
+              << " Avg time (s): " << avgtime << std::endl;
   } else {
-      std::cout << "Solution validates" << std::endl;
-      double avgtime = nstream_time/iterations;
-      double nbytes = 4.0 * length * sizeof(T);
-      std::cout << 8*sizeof(T) << "B "
-                << "Rate (MB/s): " << 1.e-6*nbytes/avgtime
-                << " Avg time (s): " << avgtime << std::endl;
+    std::cout << "ERROR: Aggregate squared error " << abserr
+              << " exceeds threshold " << epsilon << std::endl;
   }
 }
 
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-  std::cout << "C++11/SYCL STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++11/SYCL Matrix transpose: B = A^T" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
-  int iterations, offset;
-  size_t length;
+  int iterations;
+  size_t order;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length>";
+        throw "Usage: <# iterations> <matrix order>";
       }
 
+      // number of times to do the transpose
       iterations  = std::atoi(argv[1]);
       if (iterations < 1) {
         throw "ERROR: iterations must be >= 1";
       }
 
-      length = std::atol(argv[2]);
-      if (length <= 0) {
-        throw "ERROR: vector length must be positive";
-      }
-
-      offset = (argc>3) ? std::atoi(argv[3]) : 0;
-      if (length <= 0) {
-        throw "ERROR: offset must be nonnegative";
+      // order of a the matrix
+      order = std::atoi(argv[2]);
+      if (order <= 0) {
+        throw "ERROR: Matrix Order must be greater than 0";
+      } else if (order > std::floor(std::sqrt(INT_MAX))) {
+        throw "ERROR: matrix dimension too large - overflow risk";
       }
   }
   catch (const char * e) {
@@ -207,9 +200,8 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  std::cout << "Number of iterations = " << iterations << std::endl;
-  std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Offset               = " << offset << std::endl;
+  std::cout << "Number of iterations  = " << iterations << std::endl;
+  std::cout << "Matrix order          = " << order << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   /// Setup SYCL environment
@@ -219,57 +211,33 @@ int main(int argc, char * argv[])
   prk::opencl::listPlatforms();
 #endif
 
-#if SYCL_TRY_CPU_QUEUE
   try {
-    if (length<100000) {
+#if SYCL_TRY_CPU_QUEUE
+    if (order<10000) {
         sycl::queue q(sycl::host_selector{});
         prk::SYCL::print_device_platform(q);
-        run<float>(q, iterations, length);
-        run<double>(q, iterations, length);
+        run<float>(q, iterations, order);
+        run<double>(q, iterations, order);
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
 #endif
 
     // CPU requires spir64 target
 #if SYCL_TRY_CPU_QUEUE
-  try {
     if (1) {
         sycl::queue q(sycl::cpu_selector{});
         prk::SYCL::print_device_platform(q);
         bool has_spir = prk::SYCL::has_spir(q);
         if (has_spir) {
-          run<float>(q, iterations, length);
-          run<double>(q, iterations, length);
+          run<float>(q, iterations, order);
+          run<double>(q, iterations, order);
         }
     }
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
 #endif
 
     // NVIDIA GPU requires ptx64 target
 #if SYCL_TRY_GPU_QUEUE
-  try {
     if (1) {
         sycl::queue q(sycl::gpu_selector{});
         prk::SYCL::print_device_platform(q);
@@ -280,24 +248,27 @@ int main(int argc, char * argv[])
           std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
         }
         if (has_spir || has_ptx) {
-          run<float>(q, iterations, length);
+          run<float>(q, iterations, order);
           if (has_fp64) {
-            run<double>(q, iterations, length);
+            run<double>(q, iterations, order);
           }
         }
     }
+#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
+    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
+    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
+    return 1;
   }
-#endif
 
   return 0;
 }

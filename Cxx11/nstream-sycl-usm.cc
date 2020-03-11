@@ -78,33 +78,35 @@ void run(sycl::queue & q, int iterations, size_t length)
 
   const T scalar(3);
 
-  std::vector<T> h_A(length,0);
-  std::vector<T> h_B(length,2);
-  std::vector<T> h_C(length,2);
+  T * A;
+  T * B;
+  T * C;
 
   try {
 
     auto ctx = q.get_context();
+    auto dev = q.get_device();
 
 #if PREBUILD_KERNEL
     sycl::program kernel(ctx);
     kernel.build_with_kernel_type<nstream<T>>();
 #endif
 
-    sycl::buffer<T,1> d_A { h_A.data(), sycl::range<1>(h_A.size()) };
-    sycl::buffer<T,1> d_B { h_B.data(), sycl::range<1>(h_B.size()) };
-    sycl::buffer<T,1> d_C { h_C.data(), sycl::range<1>(h_C.size()) };
+    A = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
+    B = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
+    C = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
+
+    for (size_t i=0; i<length; i++) {
+      A[i] = 0.0;
+      B[i] = 2.0;
+      C[i] = 2.0;
+    }
 
     for (int iter = 0; iter<=iterations; ++iter) {
 
       if (iter==1) nstream_time = prk::wtime();
 
       q.submit([&](sycl::handler& h) {
-
-        auto A = d_A.template get_access<sycl::access::mode::read_write>(h);
-        auto B = d_B.template get_access<sycl::access::mode::read>(h);
-        auto C = d_C.template get_access<sycl::access::mode::read>(h);
-
         h.parallel_for<class nstream<T>>(
 #if PREBUILD_KERNEL
                 kernel.get_kernel<nstream<T>>(),
@@ -121,6 +123,11 @@ void run(sycl::queue & q, int iterations, size_t length)
     // since that will move data, and we do not time that
     // for other device-oriented programming models.
     nstream_time = prk::wtime() - nstream_time;
+
+    sycl::free(A, ctx);
+    sycl::free(B, ctx);
+    sycl::free(C, ctx);
+
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
@@ -151,7 +158,7 @@ void run(sycl::queue & q, int iterations, size_t length)
 
   double asum(0);
   for (size_t i=0; i<length; ++i) {
-      asum += std::fabs(h_A[i]);
+      asum += std::fabs(A[i]);
   }
 
   const double epsilon(1.e-8);
@@ -219,8 +226,8 @@ int main(int argc, char * argv[])
   prk::opencl::listPlatforms();
 #endif
 
-#if SYCL_TRY_CPU_QUEUE
   try {
+#if SYCL_TRY_CPU_QUEUE
     if (length<100000) {
         sycl::queue q(sycl::host_selector{});
         prk::SYCL::print_device_platform(q);
@@ -229,22 +236,10 @@ int main(int argc, char * argv[])
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
 #endif
 
     // CPU requires spir64 target
 #if SYCL_TRY_CPU_QUEUE
-  try {
     if (1) {
         sycl::queue q(sycl::cpu_selector{});
         prk::SYCL::print_device_platform(q);
@@ -254,22 +249,10 @@ int main(int argc, char * argv[])
           run<double>(q, iterations, length);
         }
     }
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
 #endif
 
     // NVIDIA GPU requires ptx64 target
 #if SYCL_TRY_GPU_QUEUE
-  try {
     if (1) {
         sycl::queue q(sycl::gpu_selector{});
         prk::SYCL::print_device_platform(q);
@@ -286,18 +269,21 @@ int main(int argc, char * argv[])
           }
         }
     }
+#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
+    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
+    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
+    return 1;
   }
-#endif
 
   return 0;
 }
