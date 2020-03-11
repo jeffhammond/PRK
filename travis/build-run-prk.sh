@@ -274,6 +274,11 @@ case "$PRK_TARGET" in
                         echo "Found C++: $PRK_CXX"
                         break
                     fi
+                    if [ -f "`which /usr/local/Cellar/gcc@${version}/bin/g++-${version}`" ]; then
+                        export PRK_CXX="`which /usr/local/Cellar/gcc@${version}/bin/g++-${version}`"
+                        echo "Found C++: $PRK_CXX"
+                        break
+                    fi
                   done
                 fi
                 if [ "x$PRK_CXX" = "x" ] ; then
@@ -292,16 +297,21 @@ case "$PRK_TARGET" in
             clang++)
                 # Homebrew does not always place the best/latest Clang/LLVM in the default path
                 if [ "${TRAVIS_OS_NAME}" = "osx" ] && [ "x$PRK_CXX" = "x" ] ; then
-                  for version in "" "@6" "@5" "@4" ; do
+                  for version in "" "@9" "@8" "@7" "@6" "@5" "@4" ; do
                     if [ -f "`which /usr/local/opt/llvm${version}/bin/clang++`" ]; then
                         export PRK_CXX="`which /usr/local/opt/llvm${version}/bin/clang++`"
+                        echo "Found C++: $PRK_CXX"
+                        break
+                    fi
+                    if [ -f "`which /usr/local/Cellar/llvm${version}/bin/clang++`" ]; then
+                        export PRK_CXX="`which /usr/local/Cellar/llvm${version}/bin/clang++`"
                         echo "Found C++: $PRK_CXX"
                         break
                     fi
                   done
                 fi
                 if [ "x$PRK_CXX" = "x" ] ; then
-                  for version in "-6" "-5" "-4.1" "-4" "-4.0" "-3.9" "-3.8" "-3.7" "-3.6" "" ; do
+                  for version in "-9" "-8" "-7" "-6" "-5" "-4.1" "-4" "-4.0" "-3.9" "-3.8" "-3.7" "-3.6" "" ; do
                     if [ -f "`which ${CXX}${version}`" ]; then
                         export PRK_CXX="${CXX}${version}"
                         echo "Found C++: $PRK_CXX"
@@ -655,15 +665,40 @@ case "$PRK_TARGET" in
 
         # C++ w/ SYCL
         # triSYCL requires Boost.  We are having Boost issues with Travis Linux builds.
-        if [ "${TRAVIS_OS_NAME}" = "osx" ] ; then
+        #if [ "${TRAVIS_OS_NAME}" = "osx" ] ; then
+        if [ "${TRAVIS_OS_NAME}" = "linux" ] ; then
             SYCLDIR=${TRAVIS_ROOT}/triSYCL
             if [ "${CC}" = "clang" ] ; then
                 # SYCL will compile without OpenMP
-                echo "SYCLCXX=${PRK_CXX} -pthread -std=c++1z" >> common/make.defs
+                echo "SYCLCXX=${PRK_CXX} -pthread -O3 -std=c++1z" >> common/make.defs
             else
-                echo "SYCLCXX=${PRK_CXX} -fopenmp -std=c++1z" >> common/make.defs
+                echo "SYCLCXX=${PRK_CXX} -fopenmp -O3 -std=c++17" >> common/make.defs
             fi
-            echo "SYCLFLAG=-DUSE_SYCL -I${SYCLDIR}/include" >> common/make.defs
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/circular_buffer/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/compute/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/config/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/core/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/log/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/array/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/multi_array/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/optional/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/preprocessor/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/type_index/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/utility/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/assert/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/static_assert/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/exception/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/throw_exception/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/concept_check/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/type_traits/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/iterator/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/mpl/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/detail/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/functional/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/move/include"
+            PRK_BOOST_INCLUDE="${PRK_BOOST_INCLUDE} -I${TRAVIS_ROOT}/range/include"
+            echo "SYCLFLAG=-DUSE_SYCL -I${SYCLDIR}/include" $PRK_BOOST_INCLUDE >> common/make.defs
+
             ${MAKE} -C $PRK_TARGET_PATH p2p-hyperplane-sycl stencil-sycl transpose-sycl nstream-sycl
             #$PRK_TARGET_PATH/p2p-hyperplane-sycl 10 50 1 # 100 takes too long :-o
             $PRK_TARGET_PATH/stencil-sycl        10 1000
