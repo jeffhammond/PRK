@@ -70,11 +70,7 @@
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
   std::cout << "C++17/PSTL STREAM triad: A = B + scalar * C" << std::endl;
-#else
-  std::cout << "C++11/STL STREAM triad: A = B + scalar * C" << std::endl;
-#endif
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
@@ -126,15 +122,7 @@ int main(int argc, char * argv[])
   double scalar(3);
 
   {
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
     std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-#warning GNU parallel
-    __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-    std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
         A[i] = 0;
         B[i] = 2;
         C[i] = 2;
@@ -144,14 +132,7 @@ int main(int argc, char * argv[])
 
       if (iter==1) nstream_time = prk::wtime();
 
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
       std::for_each( exec::par_unseq, std::begin(range), std::end(range), [&] (size_t i) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-      __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#else
-      std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
-#endif
           A[i] += B[i] + scalar * C[i];
       });
     }
@@ -165,7 +146,7 @@ int main(int argc, char * argv[])
   double ar(0);
   double br(2);
   double cr(2);
-  for (auto i=0; i<=iterations; i++) {
+  for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
 

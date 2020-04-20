@@ -66,11 +66,7 @@
 int main(int argc, char* argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
   std::cout << "C++17/PSTL HYPERPLANE pipeline execution on 2D grid" << std::endl;
-#else
-  std::cout << "C++11/STL HYPERPLANE pipeline execution on 2D grid" << std::endl;
-#endif
 
   //////////////////////////////////////////////////////////////////////
   // Process and test input parameters
@@ -124,7 +120,7 @@ int main(int argc, char* argv[])
   std::vector<double> grid(n*n,0.0);
 
   // set boundary values (bottom and left side of grid)
-  for (auto j=0; j<n; j++) {
+  for (int j=0; j<n; j++) {
     grid[0*n+j] = static_cast<double>(j);
     grid[j*n+0] = static_cast<double>(j);
   }
@@ -134,18 +130,11 @@ int main(int argc, char* argv[])
     if (iter==1) pipeline_time = prk::wtime();
 
     if (nc==1) {
-      for (auto i=2; i<=2*n-2; i++) {
+      for (int i=2; i<=2*n-2; i++) {
         const auto begin = std::max(2,i-n+2);
         const auto end   = std::min(i,n)+1;
         auto range = prk::range(begin,end);
-#if defined(USE_PSTL) && defined(USE_INTEL_PSTL)
         std::for_each( exec::par, std::begin(range), std::end(range), [&] (auto j) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-        __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (auto j) {
-#else
-        std::for_each( std::begin(range), std::end(range), [&] (auto j) {
-#endif
           const auto x = i-j+1;
           const auto y = j-1;
           grid[x*n+y] = grid[(x-1)*n+y] + grid[x*n+(y-1)] - grid[(x-1)*n+(y-1)];
@@ -156,14 +145,7 @@ int main(int argc, char* argv[])
         const auto begin = std::max(2,i-(nb+1)+2);
         const auto end   = std::min(i,nb+1)+1;
         auto range = prk::range(begin,end);
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
         std::for_each( exec::par, std::begin(range), std::end(range), [&] (auto j) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-        __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (auto j) {
-#else
-        std::for_each( std::begin(range), std::end(range), [&] (auto j) {
-#endif
           const int ib = nc*(i-j)+1;
           const int jb = nc*(j-2)+1;
           sweep_tile(ib, std::min(n,ib+nc), jb, std::min(n,jb+nc), n, grid);

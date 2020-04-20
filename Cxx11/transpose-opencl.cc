@@ -65,7 +65,7 @@ void run(cl::Context context, int iterations, int order)
   auto function = (precision==64) ? "transpose64" : "transpose32";
 
   cl_int err;
-  auto kernel = cl::make_kernel<int, cl::Buffer, cl::Buffer>(program, function, &err);
+  auto kernel = cl::KernelFunctor<int, cl::Buffer, cl::Buffer>(program, function, &err);
   if(err != CL_SUCCESS){
     std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
     std::cout << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]) << std::endl;
@@ -90,7 +90,7 @@ void run(cl::Context context, int iterations, int order)
 
   auto trans_time = 0.0;
 
-  for (auto iter = 0; iter<=iterations; iter++) {
+  for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) trans_time = prk::wtime();
 
@@ -107,8 +107,8 @@ void run(cl::Context context, int iterations, int order)
   // TODO: replace with std::generate, std::accumulate, or similar
   const double addit = (iterations+1.0) * (0.5*iterations);
   double abserr = 0.0;
-  for (auto j=0; j<order; j++) {
-    for (auto i=0; i<order; i++) {
+  for (int j=0; j<order; j++) {
+    for (int i=0; i<order; i++) {
       const int ij = i*order+j;
       const int ji = j*order+i;
       const double reference = static_cast<double>(ij)*(iterations+1)+addit;

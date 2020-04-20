@@ -62,15 +62,7 @@
 
 #include "prk_util.h"
 #include "prk_pstl.h"
-// See ParallelSTL.md for important information.
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
 #include "stencil_pstl.hpp"
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-#include "stencil_pgnu.hpp"
-#else
-#include "stencil_stl.hpp"
-#endif
 
 void nothing(const int n, const int t, std::vector<double> & in, std::vector<double> & out)
 {
@@ -85,11 +77,7 @@ void nothing(const int n, const int t, std::vector<double> & in, std::vector<dou
 int main(int argc, char* argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
   std::cout << "C++17/PSTL Stencil execution on 2D grid" << std::endl;
-#else
-  std::cout << "C++11/STL Stencil execution on 2D grid" << std::endl;
-#endif
 
   //////////////////////////////////////////////////////////////////////
   // Process and test input parameters
@@ -182,17 +170,8 @@ int main(int argc, char* argv[])
 
   // initialize the input and output arrays
   auto range = prk::range(0,n);
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
   std::for_each( exec::par, std::begin(range), std::end(range), [&] (int i) {
     std::for_each( exec::unseq, std::begin(range), std::end(range), [&] (int j) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-  __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (int i) {
-    __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (int j) {
-#else
-  std::for_each( std::begin(range), std::end(range), [&] (int i) {
-    std::for_each( std::begin(range), std::end(range), [&] (int j) {
-#endif
       in[i*n+j] = static_cast<double>(i+j);
       out[i*n+j] = 0.0;
     });
@@ -203,14 +182,7 @@ int main(int argc, char* argv[])
     // Apply the stencil operator
     stencil(n, tile_size, in, out);
     // Add constant to solution to force refresh of neighbor data, if any
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
     std::transform( exec::par_unseq, in.begin(), in.end(), in.begin(), [](double c) { return c+=1.0; });
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-    __gnu_parallel::transform( in.begin(), in.end(), in.begin(), [](double c) { return c+=1.0; });
-#else
-    std::transform( in.begin(), in.end(), in.begin(), [](double c) { return c+=1.0; });
-#endif
   }
 
   stencil_time = prk::wtime() - stencil_time;

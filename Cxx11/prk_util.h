@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib> // atoi, getenv
 #include <cstdint>
+#include <cfloat>  // FLT_MIN
 #include <climits>
 #include <cmath>   // abs, fabs
 #include <cassert>
@@ -276,6 +277,16 @@ namespace prk {
     template <class T1, class T2>
     static inline auto divceil(T1 numerator, T2 denominator) -> decltype(numerator / denominator) {
         return ( numerator / denominator + (numerator % denominator > 0) );
+    }
+
+    bool parse_boolean(const std::string & s)
+    {
+        if (s=="t" || s=="T" || s=="y" || s=="Y" || s=="1") {
+            return true;
+        } else {
+            return false;
+        }
+
     }
 
     template<typename T>

@@ -74,7 +74,7 @@ void run(cl::Context context, int iterations, size_t length)
   auto function = (precision==64) ? "nstream64" : "nstream32";
 
   cl_int err;
-  auto kernel = cl::make_kernel<int, T, cl::Buffer, cl::Buffer, cl::Buffer>(program, function, &err);
+  auto kernel = cl::KernelFunctor<int, T, cl::Buffer, cl::Buffer, cl::Buffer>(program, function, &err);
   if(err != CL_SUCCESS){
     std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
     std::cout << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]) << std::endl;
@@ -99,7 +99,7 @@ void run(cl::Context context, int iterations, size_t length)
 
   double scalar = 3.0;
 
-  for (auto iter = 0; iter<=iterations; iter++) {
+  for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) nstream_time = prk::wtime();
 
@@ -120,7 +120,7 @@ void run(cl::Context context, int iterations, size_t length)
   double ar(0);
   T br(2);
   T cr(2);
-  for (auto i=0; i<=iterations; i++) {
+  for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
 

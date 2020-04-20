@@ -52,16 +52,10 @@
 #include "prk_util.h"
 #include "prk_pstl.h"
 
-// See ParallelSTL.md for important information.
-
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-#if defined(USE_PSTL)
   std::cout << "C++17/PSTL Matrix transpose: B = A^T" << std::endl;
-#else
-  std::cout << "C++11/STL Matrix transpose: B = A^T" << std::endl;
-#endif
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
@@ -115,19 +109,10 @@ int main(int argc, char * argv[])
     if (iter==1) trans_time = prk::wtime();
 
     // transpose
-#if defined(USE_PSTL) && ( defined(USE_INTEL_PSTL) || ( defined(__GNUC__) && (__GNUC__ >= 9) ) )
-  std::for_each( exec::par, std::begin(range), std::end(range), [&] (int i) {
-    std::for_each( exec::unseq, std::begin(range), std::end(range), [&] (int j) {
-#elif defined(USE_PSTL) && defined(__GNUC__) && defined(__GNUC_MINOR__) \
-                        && ( (__GNUC__ == 8) || (__GNUC__ == 7) && (__GNUC_MINOR__ >= 2) )
-  __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (int i) {
-    __gnu_parallel::for_each( std::begin(range), std::end(range), [&] (int j) {
-#else
-  std::for_each( std::begin(range), std::end(range), [&] (int i) {
-    std::for_each( std::begin(range), std::end(range), [&] (int j) {
-#endif
-        B[i*order+j] += A[j*order+i];
-        A[j*order+i] += 1.0;
+    std::for_each( exec::par, std::begin(range), std::end(range), [&] (int i) {
+      std::for_each( exec::unseq, std::begin(range), std::end(range), [&] (int j) {
+          B[i*order+j] += A[j*order+i];
+          A[j*order+i] += 1.0;
       });
     });
   }
