@@ -194,11 +194,6 @@ program main
   call ga_put( A, mylo(1), myhi(1), mylo(2), myhi(2), T, myhi(1)-mylo(1)+1 )
   call ga_sync()
 
-  ok = ma_init(MT_DBL, order*order, 0)
-  if (.not.ok) then
-    call ga_error('ma_init failed', order)
-  endif
-
   if (order.lt.10) then
     call ga_print(A)
   endif
@@ -207,11 +202,18 @@ program main
 
     ! start timer after a warmup iteration
     if (k.eq.1) then
+        ! FIXME
+        call ga_distribution( A, me, mylo(1), myhi(1), mylo(2), myhi(2) )
+        allocate( T2(myhi(1)-mylo(1)+1,myhi(2)-mylo(2)+1), stat=err)
+        if (err .ne. 0) then
+          call ga_error('allocation of T failed',err)
+        endif
         call ga_sync()
         t0 = ga_wtime()
     endif
 
     ! B += A^T
+    call ga_get( A, mylo(2), myhi(2), mylo(1), myhi(1), T, myhi(2)-mylo(2)+1 )
     ! A += 1
     call ga_transpose(A,AT)      ! C  = A^T
     call ga_sync()               ! ga_tranpose does not synchronize after remote updates
@@ -223,6 +225,10 @@ program main
 
   call ga_sync()
   t1 = ga_wtime()
+
+  if (iterations.ge.1) then ! always true in practice
+    deallocate( T2 )
+  endif
 
   trans_time = t1 - t0
 
@@ -291,9 +297,6 @@ program main
 #ifdef PRK_GA_SUMMARY
   if (me.eq.0) write(*,'(a)') ! add an empty line
   call ga_summarize(.false.)
-  if (me.eq.0) then
-    call ma_print_stats()
-  endif
 #endif
 
   call ga_terminate()
