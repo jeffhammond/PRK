@@ -85,8 +85,8 @@ program main
   logical :: ok
   integer :: me, np
   integer, parameter :: ndim = 1
-  integer :: dims(ndim)
-  integer :: chunk(ndim)
+  integer :: dims(ndim), chunk(ndim)
+  integer :: mylo(ndim), myhi(ndim)
   integer :: A, B, C
   real(kind=REAL64), parameter :: zero = 0.d0
   real(kind=REAL64), parameter :: one  = 1.d0
@@ -207,11 +207,15 @@ program main
 
   call ga_sync()
 
-  call ga_fill(A,zero)
+  call ga_zero(A)
   call ga_fill(B,two)
   call ga_fill(C,two)
 
   call ga_sync()
+
+  call nga_distribution(A, me, mylo, myhi)
+
+  call ga_error("unfinished - GA access API from Fortran is too gross",-1);
 
   do k=0,iterations
 
