@@ -41,11 +41,13 @@ TBBFLAGS = $(TBBFLAG) -DPRK_TBB_PARTITIONER=$(PRK_TBB_PARTITIONER)
 CBLASFLAGS = $(CBLASFLAG) $(OPENMPFLAG)
 BOOSTFLAGS = $(BOOSTFLAG) -DUSE_RANGES -DUSE_BOOST_IRANGE
 RANGEFLAGS = $(RANGEFLAG) -DUSE_RANGES
-STLFLAGS = $(STLFLAG) $(RANGEFLAGS)
+# add Boost for transform + zip_iterator
+STLFLAGS = $(STLFLAG) $(RANGEFLAGS) $(BOOSTFLAGS)
 PSTLFLAGS = $(PSTLFLAG) $(RANGEFLAGS)
+EXECUTORSFLAGS = $(EXECUTORSFLAG) $(PSTLFLAGS) #$(RANGEFLAGS)
 RAJAFLAGS = $(RAJAFLAG)
 THRUSTFLAGS = $(THRUSTFLAG) $(RANGEFLAGS)
-KOKKOSFLAGS = $(KOKKOSFLAG) $(KOKKOS_BACKEND_FLAG) #$(RANGEFLAGS)
+KOKKOSFLAGS = $(KOKKOSFLAG) $(KOKKOS_BACKEND_FLAG)
 SYCLFLAGS = $(SYCLFLAG) -DUSE_2D_INDEXING=0
 ORNLACCFLAGS = $(ORNLACCFLAG)
 
@@ -55,7 +57,8 @@ endif
 OCCAFLAGS = -I${OCCADIR}/include -Wl,-rpath -Wl,${OCCADIR}/lib -L${OCCADIR}/lib -locca
 
 .PHONY: all clean vector valarray openmp target opencl taskloop tbb stl pstl \
-	rangefor kokkos raja cuda cublas sycl boost-compute thrust
+	rangefor kokkos raja cuda cublas sycl sycl-usm sycl-explicit dpcpp \
+	boost-compute thrust executor
 
 EXTRA=
 ifeq ($(shell uname -s),Darwin)
@@ -66,34 +69,15 @@ else
   EXTRA += target
 endif
 ifneq ($(findstring pgc++,$(CXX)),pgc++)
-  EXTRA += tbb pstl
+  EXTRA += pstl
 endif
 
 all: sequential vector valarray openmp taskloop stl rangefor opencl sycl $(EXTRA)
 
-#p2p: p2p-vector p2p-doacross-openmp p2p-hyperplane-openmp p2p-tasks-openmp p2p-openmp-target \
-     p2p-innerloop-vector-tbb p2p-vector-raja p2p-vector-tbb p2p-innerloop-opencl p2p-hyperplane-vector-tbb \
-     p2p-hyperplane-sycl p2p-hyperplane-vector-ornlacc p2p-tasks-tbb
-
-#stencil: stencil-valarray stencil-vector stencil-vector-async stencil-openmp stencil-openmp-target \
-	 stencil-vector-taskloop stencil-vector-stl stencil-vector-pstl stencil-vector-raja \
-	 stencil-vector-rangefor stencil-vector-tbb stencil-vector-thread stencil-kokkos stencil-opencl \
-	 stencil-cuda
-
-#transpose: transpose-valarray transpose-vector transpose-vector-async transpose-openmp transpose-openmp-target \
-	   transpose-vector-taskloop transpose-vector-stl transpose-vector-pstl transpose-vector-raja \
-	   transpose-vector-rangefor transpose-vector-tbb transpose-vector-thread transpose-kokkos transpose-opencl
-
-#nstream: nstream-valarray nstream-vector nstream-openmp nstream-openmp-target \
-	 nstream-vector-taskloop nstream-vector-stl nstream-vector-pstl nstream-vector-raja \
-	 nstream-vector-rangefor nstream-vector-tbb nstream-kokkos nstream-opencl
-
-#dgemm: dgemm-vector dgemm-cblas dgemm-cublas
-
 sequential: p2p stencil transpose nstream dgemm sparse
 
 vector: p2p-vector p2p-hyperplane-vector stencil-vector transpose-vector nstream-vector sparse-vector dgemm-vector \
-	transpose-vector-async transpose-vector-thread
+	transpose-async transpose-thread
 
 valarray: transpose-valarray nstream-valarray
 
@@ -101,7 +85,9 @@ openmp: p2p-hyperplane-openmp p2p-tasks-openmp stencil-openmp transpose-openmp n
 
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
 
-taskloop: stencil-vector-taskloop transpose-vector-taskloop nstream-vector-taskloop
+taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
+
+mpi: nstream-mpi stencil-mpi
 
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
@@ -111,19 +97,23 @@ sycl-usm: nstream-sycl-usm stencil-sycl-usm transpose-sycl-usm
 
 sycl-explicit: nstream-sycl-explicit transpose-sycl-explicit
 
-tbb: p2p-innerloop-vector-tbb p2p-vector-tbb stencil-vector-tbb transpose-vector-tbb nstream-vector-tbb \
-     p2p-hyperplane-vector-tbb p2p-tasks-tbb
+dpcpp: sycl sycl-usm sycl-explicit
 
-stl: stencil-vector-stl transpose-vector-stl nstream-vector-stl
+tbb: p2p-innerloop-tbb p2p-tbb stencil-tbb transpose-tbb nstream-tbb \
+     p2p-hyperplane-tbb p2p-tasks-tbb
 
-pstl: stencil-vector-pstl transpose-vector-pstl nstream-vector-pstl
+stl: stencil-stl transpose-stl nstream-stl
 
-rangefor: stencil-vector-rangefor transpose-vector-rangefor nstream-vector-rangefor
+pstl: stencil-pstl transpose-pstl nstream-pstl
+
+rangefor: stencil-rangefor transpose-rangefor nstream-rangefor
+
+executors: nstream-executors transpose-executors
 
 kokkos: stencil-kokkos transpose-kokkos nstream-kokkos
 
-raja: p2p-vector-raja stencil-vector-raja nstream-vector-raja \
-      p2p-raja transpose-raja nstream-raja stencil-raja # transpose-vector-raja
+raja: p2p-raja stencil-raja nstream-raja \
+      p2p-raja transpose-raja nstream-raja stencil-raja # transpose-raja
 
 cuda: stencil-cuda transpose-cuda nstream-cuda nstream-cuda-managed
 
@@ -138,9 +128,9 @@ cblas: transpose-cblas dgemm-cblas
 
 occa: transpose-occa nstream-occa
 
-ornlacc: p2p-hyperplane-vector-ornlacc
+ornlacc: p2p-hyperplane-ornlacc
 
-boost-compute: nstream-vector-boost-compute
+boost-compute: nstream-boost-compute
 # busted
 #nstream-valarray-boost-compute
 
@@ -152,6 +142,12 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 #nstream-opencl: nstream-opencl.cc nstream.cl prk_util.h prk_opencl.h
 #	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
+
+%-mpi: %-mpi.cc prk_util.h prk_mpi.h
+	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+
+%-mpi: %-mpi.cc prk_util.h prk_mpi.h
+	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
 
 %-opencl: %-opencl.cc prk_util.h prk_opencl.h
 	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
@@ -192,6 +188,9 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 %-rangefor: %-rangefor.cc prk_util.h prk_ranges.h
 	$(CXX) $(CXXFLAGS) $< $(RANGEFLAGS) -o $@
+
+%-executors: %-executors.cc prk_util.h prk_executors.h
+	$(CXX) $(CXXFLAGS) $< $(EXECUTORSFLAGS) -o $@
 
 %-boost-compute: %-boost-compute.cc prk_util.h prk_opencl.h
 	$(CXX) $(CXXFLAGS) $< $(BOOSTFLAGS) $(OPENCLFLAGS) -o $@
@@ -261,6 +260,7 @@ clean:
 	-rm -f *-openmp
 	-rm -f *-target
 	-rm -f *-taskloop
+	-rm -f *-mpi
 	-rm -f *-opencl
 	-rm -f *-sycl
 	-rm -f *-sycl-explicit
@@ -279,7 +279,7 @@ clean:
 	-rm -f *-occa
 	-rm -f *-boost-compute
 	-rm -f *-ornlacc
-	-rm -f transpose-vector-async transpose-vector-thread
+	-rm -f transpose-async transpose-thread
 
 cleancl:
 	-rm -f star[123456789].cl

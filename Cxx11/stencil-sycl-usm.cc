@@ -105,18 +105,18 @@ void run(sycl::queue & q, int iterations, size_t n, size_t tile_size, bool star,
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
+  auto ctx = q.get_context();
+
   double stencil_time(0);
 
-  T * in;
   T * out;
-
-  auto ctx = q.get_context();
-  auto dev = q.get_device();
 
   try {
 
-    in  = static_cast<T*>(sycl::malloc_shared(n * n * sizeof(T), dev, ctx));
-    out = static_cast<T*>(sycl::malloc_shared(n * n * sizeof(T), dev, ctx));
+    auto dev = q.get_device();
+
+    T * in  = static_cast<T*>(syclx::malloc_shared(n * n * sizeof(T), dev, ctx));
+    out = static_cast<T*>(syclx::malloc_shared(n * n * sizeof(T), dev, ctx));
 
     q.submit([&](sycl::handler& h) {
 
@@ -146,7 +146,7 @@ void run(sycl::queue & q, int iterations, size_t n, size_t tile_size, bool star,
     }
     stencil_time = prk::wtime() - stencil_time;
 
-    sycl::free(in, ctx);
+    syclx::free(in, ctx);
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
@@ -173,17 +173,17 @@ void run(sycl::queue & q, int iterations, size_t n, size_t tile_size, bool star,
   double norm(0);
   for (int i=radius; i<n-radius; i++) {
     for (int j=radius; j<n-radius; j++) {
-      norm += std::fabs(out[i*n+j]);
+      norm += prk::abs(out[i*n+j]);
     }
   }
   norm /= active_points;
 
-  sycl::free(out, ctx);
+  syclx::free(out, ctx);
 
   // verify correctness
   const double epsilon = 1.0e-8;
   const double reference_norm = 2*(iterations+1);
-  if (std::fabs(norm-reference_norm) > epsilon) {
+  if (prk::abs(norm-reference_norm) > epsilon) {
     std::cout << "ERROR: L1 norm = " << norm
               << " Reference L1 norm = " << reference_norm << std::endl;
   } else {
@@ -229,7 +229,7 @@ int main(int argc, char * argv[])
       n  = std::atoi(argv[2]);
       if (n < 1) {
         throw "ERROR: grid dimension must be positive";
-      } else if (n > std::floor(std::sqrt(INT_MAX))) {
+      } else if (n > prk::get_max_matrix_size()) {
         throw "ERROR: grid dimension too large - overflow risk";
       }
 

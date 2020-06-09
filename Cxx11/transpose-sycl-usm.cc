@@ -61,28 +61,28 @@ void run(sycl::queue & q, int iterations, size_t order)
   // Allocate space for the input and transpose matrix
   //////////////////////////////////////////////////////////////////////
 
-  double trans_time(0);
-
   auto ctx = q.get_context();
   auto dev = q.get_device();
 
-  T * A = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
-  T * B = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
+  double trans_time(0);
 
-  for (int i=0;i<order; i++) {
-    for (int j=0;j<order;j++) {
-      A[i*order+j] = static_cast<double>(i*order+j);
-      B[i*order+j] = 0.0;
-    }
-  }
+  T * B = static_cast<T*>(syclx::malloc_shared(order*order * sizeof(T), dev, ctx));
 
   try {
+
+    T * A = static_cast<T*>(syclx::malloc_shared(order*order * sizeof(T), dev, ctx));
+
+    for (int i=0;i<order; i++) {
+      for (int j=0;j<order;j++) {
+        A[i*order+j] = static_cast<double>(i*order+j);
+        B[i*order+j] = 0.0;
+      }
+    }
 
 #if PREBUILD_KERNEL
     sycl::program kernel(ctx);
     kernel.build_with_kernel_type<transpose<T>>();
 #endif
-
 
     for (int iter = 0; iter<=iterations; ++iter) {
 
@@ -113,6 +113,8 @@ void run(sycl::queue & q, int iterations, size_t order)
     // since that will move data, and we do not time that
     // for other device-oriented programming models.
     trans_time = prk::wtime() - trans_time;
+
+    syclx::free(A, ctx);
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
@@ -128,8 +130,7 @@ void run(sycl::queue & q, int iterations, size_t order)
     return;
   }
 
-  sycl::free(A, ctx);
-  sycl::free(B, ctx);
+  syclx::free(B, ctx);
 
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
@@ -143,7 +144,7 @@ void run(sycl::queue & q, int iterations, size_t order)
       size_t const ij = i*order+j;
       size_t const ji = j*order+i;
       const T reference = static_cast<T>(ij)*(1.+iterations)+addit;
-      abserr += std::fabs(B[ji] - reference);
+      abserr += prk::abs(B[ji] - reference);
     }
   }
 
@@ -191,7 +192,7 @@ int main(int argc, char * argv[])
       order = std::atoi(argv[2]);
       if (order <= 0) {
         throw "ERROR: Matrix Order must be greater than 0";
-      } else if (order > std::floor(std::sqrt(INT_MAX))) {
+      } else if (order > prk::get_max_matrix_size()) {
         throw "ERROR: matrix dimension too large - overflow risk";
       }
   }
