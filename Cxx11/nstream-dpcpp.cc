@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2017, Intel Corporation
+/// Copyright (c) 2020, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -52,7 +52,6 @@
 ///          by the execution time. For a vector length of N, the total
 ///          number of words read and written is 4*N*sizeof(double).
 ///
-///
 /// HISTORY: This code is loosely based on the Stream benchmark by John
 ///          McCalpin, but does not follow all the Stream rules. Hence,
 ///          reported results should not be associated with Stream in
@@ -62,23 +61,23 @@
 ///
 //////////////////////////////////////////////////////////////////////
 
+#include "prk_sycl.h"
 #include "prk_util.h"
-#include "prk_openmp.h"
 
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-  std::cout << "C++11/OpenMP TASKLOOP STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++11/DPC++ STREAM triad: A = B + scalar * C" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
   int iterations;
-  size_t length, gs, offset;
+  size_t length;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length>";
+        throw "Usage: <# iterations> <vector length> [<grid_stride>]";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -86,20 +85,9 @@ int main(int argc, char * argv[])
         throw "ERROR: iterations must be >= 1";
       }
 
-      length = std::atol(argv[2]);
+      length = std::atoi(argv[2]);
       if (length <= 0) {
         throw "ERROR: vector length must be positive";
-      }
-
-      // taskloop grainsize
-      gs = (argc > 3) ? std::atoi(argv[3]) : 1;
-      if (gs < 1 || gs > length) {
-        throw "ERROR: grainsize";
-      }
-
-      offset = (argc>4) ? std::atoi(argv[4]) : 0;
-      if (length <= 0) {
-        throw "ERROR: offset must be nonnegative";
       }
   }
   catch (const char * e) {
@@ -107,49 +95,64 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-#ifdef _OPENMP
-  std::cout << "Number of threads    = " << omp_get_max_threads() << std::endl;
-  std::cout << "Taskloop grainsize   = " << gs << std::endl;
-#endif
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Offset               = " << offset << std::endl;
+
+  sycl::queue q(sycl::default_selector{});
+  prk::SYCL::print_device_platform(q);
 
   //////////////////////////////////////////////////////////////////////
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  auto nstream_time = 0.0;
+  double nstream_time(0);
 
-  prk::vector<double> A(length);
-  prk::vector<double> B(length);
-  prk::vector<double> C(length);
+  const size_t bytes = length * sizeof(double);
 
-  double scalar = 3.0;
+  double * h_A = syclx::malloc_host<double>(length, q);
+  double * h_B = syclx::malloc_host<double>(length, q);
+  double * h_C = syclx::malloc_host<double>(length, q);
 
-  OMP_PARALLEL()
-  OMP_MASTER
+  for (size_t i=0; i<length; ++i) {
+    h_A[i] = 0;
+    h_B[i] = 2;
+    h_C[i] = 2;
+  }
+
+  double * d_A = syclx::malloc_device<double>(length, q);
+  double * d_B = syclx::malloc_device<double>(length, q);
+  double * d_C = syclx::malloc_device<double>(length, q);
+  q.memcpy(d_A, &(h_A[0]), bytes).wait();
+  q.memcpy(d_B, &(h_B[0]), bytes).wait();
+  q.memcpy(d_C, &(h_C[0]), bytes).wait();
+
+  double scalar(3);
   {
-    OMP_TASKLOOP( firstprivate(length) shared(A,B,C) grainsize(gs) )
-    for (size_t i=0; i<length; i++) {
-      A[i] = 0.0;
-      B[i] = 2.0;
-      C[i] = 2.0;
-    }
-    OMP_TASKWAIT
-
     for (int iter = 0; iter<=iterations; iter++) {
 
       if (iter==1) nstream_time = prk::wtime();
 
-      OMP_TASKLOOP( firstprivate(length) shared(A,B,C) grainsize(gs) )
-      for (size_t i=0; i<length; i++) {
-          A[i] += B[i] + scalar * C[i];
-      }
-      OMP_TASKWAIT
+      q.submit([&](sycl::handler& h) {
+
+        h.parallel_for( sycl::range<1>{length}, [=] (sycl::id<1> it) {
+            const size_t i = it[0];
+            d_A[i] += d_B[i] + scalar * d_C[i];
+        });
+      });
+      q.wait();
     }
+
     nstream_time = prk::wtime() - nstream_time;
   }
+
+  q.memcpy(&(h_A[0]), d_A, bytes).wait();
+
+  syclx::free(d_C, q);
+  syclx::free(d_B, q);
+  syclx::free(d_A, q);
+
+  syclx::free(h_B, q);
+  syclx::free(h_C, q);
 
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
@@ -165,14 +168,16 @@ int main(int argc, char * argv[])
   ar *= length;
 
   double asum(0);
-  OMP_PARALLEL_FOR_REDUCE( +:asum )
-  for (size_t i=0; i<length; i++) {
-      asum += prk::abs(A[i]);
+  for (int i=0; i<length; i++) {
+    asum += prk::abs(h_A[i]);
   }
 
+  syclx::free(h_A, q);
+
   double epsilon=1.e-8;
-  if (prk::abs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar - asum) / asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
+                << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"
                 << "       Observed checksum: " << asum << std::endl;
       std::cout << "ERROR: solution did not validate" << std::endl;

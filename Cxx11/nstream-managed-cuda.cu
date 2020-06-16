@@ -39,10 +39,10 @@
 ///          a third vector.
 ///
 /// USAGE:   The program takes as input the number
-///          of iterations to loop over the triad vectors, the length of the
-///          vectors, and the offset between vectors
+///          of iterations to loop over the triad vectors and the length
+///          of the vectors.
 ///
-///          <progname> <# iterations> <vector length> <offset>
+///          <progname> <# iterations> <vector length> ...
 ///
 ///          The output consists of diagnostics to make sure the
 ///          algorithm worked, and of timing statistics.
@@ -51,7 +51,6 @@
 ///          number of words written, times the size of the words, divided
 ///          by the execution time. For a vector length of N, the total
 ///          number of words read and written is 4*N*sizeof(double).
-///
 ///
 /// HISTORY: This code is loosely based on the Stream benchmark by John
 ///          McCalpin, but does not follow all the Stream rules. Hence,
@@ -63,22 +62,52 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
-#include "prk_openmp.h"
+#include "prk_cuda.h"
+
+__global__ void nstream(const unsigned n, const prk_float scalar, prk_float * A, const prk_float * B, const prk_float * C)
+{
+    unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        A[i] += B[i] + scalar * C[i];
+    }
+}
+
+__global__ void nstream2(const unsigned n, const prk_float scalar, prk_float * A, const prk_float * B, const prk_float * C)
+{
+    for (unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x) {
+        A[i] += B[i] + scalar * C[i];
+    }
+}
+
+__global__ void fault_pages(const unsigned n, prk_float * A, prk_float * B, prk_float * C)
+{
+    //const unsigned inc = 4096/sizeof(prk_float);
+    //for (unsigned int i = 0; i < n; i += inc) {
+    for (unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x) {
+        A[i] = (prk_float)0;
+        B[i] = (prk_float)2;
+        C[i] = (prk_float)2;
+    }
+}
 
 int main(int argc, char * argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
-  std::cout << "C++11/OpenMP TASKLOOP STREAM triad: A = B + scalar * C" << std::endl;
+  std::cout << "C++11/CUDA STREAM triad: A = B + scalar * C" << std::endl;
+
+  prk::CUDA::info info;
+  //info.print();
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
   int iterations;
-  size_t length, gs, offset;
+  int length;
+  bool system_memory,  grid_stride, ordered_fault, prefetch;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length>";
+        throw "Usage: <# iterations> <vector length> [<use_system_memory> <grid_stride> <ordered_fault> <prefetch>]";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -86,67 +115,85 @@ int main(int argc, char * argv[])
         throw "ERROR: iterations must be >= 1";
       }
 
-      length = std::atol(argv[2]);
+      length = std::atoi(argv[2]);
       if (length <= 0) {
         throw "ERROR: vector length must be positive";
       }
 
-      // taskloop grainsize
-      gs = (argc > 3) ? std::atoi(argv[3]) : 1;
-      if (gs < 1 || gs > length) {
-        throw "ERROR: grainsize";
-      }
-
-      offset = (argc>4) ? std::atoi(argv[4]) : 0;
-      if (length <= 0) {
-        throw "ERROR: offset must be nonnegative";
-      }
+      system_memory = (argc>3) ? prk::parse_boolean(std::string(argv[3])) : false;
+      grid_stride   = (argc>4) ? prk::parse_boolean(std::string(argv[4])) : false;
+      ordered_fault = (argc>5) ? prk::parse_boolean(std::string(argv[5])) : false;
+      prefetch      = (argc>6) ? prk::parse_boolean(std::string(argv[6])) : false;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
     return 1;
   }
 
-#ifdef _OPENMP
-  std::cout << "Number of threads    = " << omp_get_max_threads() << std::endl;
-  std::cout << "Taskloop grainsize   = " << gs << std::endl;
-#endif
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Offset               = " << offset << std::endl;
+  std::cout << "Memory allocator     = " << (system_memory ? "system (malloc)" : "cudaMallocManaged") << std::endl;
+  std::cout << "Grid stride          = " << (grid_stride   ? "yes" : "no") << std::endl;
+  std::cout << "Ordered fault        = " << (ordered_fault ? "yes" : "no") << std::endl;
+  std::cout << "Prefetch             = " << (prefetch ? "yes" : "no") << std::endl;
+
+  const int blockSize = 256;
+  dim3 dimBlock(blockSize, 1, 1);
+  dim3 dimGrid(prk::divceil(length,blockSize), 1, 1);
+
+  info.checkDims(dimBlock, dimGrid);
 
   //////////////////////////////////////////////////////////////////////
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  auto nstream_time = 0.0;
+  double nstream_time(0);
 
-  prk::vector<double> A(length);
-  prk::vector<double> B(length);
-  prk::vector<double> C(length);
+  prk_float * A;
+  prk_float * B;
+  prk_float * C;
 
-  double scalar = 3.0;
+  const size_t bytes = length * sizeof(prk_float);
+  if (system_memory) {
+      A = new double[length];
+      B = new double[length];
+      C = new double[length];
+  } else {
+      prk::CUDA::check( cudaMallocManaged((void**)&A, bytes) );
+      prk::CUDA::check( cudaMallocManaged((void**)&B, bytes) );
+      prk::CUDA::check( cudaMallocManaged((void**)&C, bytes) );
+  }
 
-  OMP_PARALLEL()
-  OMP_MASTER
+  // initialize on CPU to ensure pages are faulted there
+  for (int i=0; i<length; ++i) {
+    A[i] = static_cast<prk_float>(0);
+    B[i] = static_cast<prk_float>(2);
+    C[i] = static_cast<prk_float>(2);
+  }
+
+  if (ordered_fault) {
+      fault_pages<<<1,1>>>(static_cast<unsigned>(length), A, B, C);
+      prk::CUDA::check( cudaDeviceSynchronize() );
+  }
+
+  if (prefetch) {
+      prk::CUDA::check( cudaMemPrefetchAsync(A, bytes, 0) );
+      prk::CUDA::check( cudaMemPrefetchAsync(B, bytes, 0) );
+      prk::CUDA::check( cudaMemPrefetchAsync(C, bytes, 0) );
+  }
+
+  prk_float scalar(3);
   {
-    OMP_TASKLOOP( firstprivate(length) shared(A,B,C) grainsize(gs) )
-    for (size_t i=0; i<length; i++) {
-      A[i] = 0.0;
-      B[i] = 2.0;
-      C[i] = 2.0;
-    }
-    OMP_TASKWAIT
-
     for (int iter = 0; iter<=iterations; iter++) {
 
       if (iter==1) nstream_time = prk::wtime();
 
-      OMP_TASKLOOP( firstprivate(length) shared(A,B,C) grainsize(gs) )
-      for (size_t i=0; i<length; i++) {
-          A[i] += B[i] + scalar * C[i];
+      if (grid_stride) {
+          nstream2<<<dimGrid, dimBlock>>>(static_cast<unsigned>(length), scalar, A, B, C);
+      } else {
+          nstream<<<dimGrid, dimBlock>>>(static_cast<unsigned>(length), scalar, A, B, C);
       }
-      OMP_TASKWAIT
+      prk::CUDA::check( cudaDeviceSynchronize() );
     }
     nstream_time = prk::wtime() - nstream_time;
   }
@@ -161,18 +208,27 @@ int main(int argc, char * argv[])
   for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
-
   ar *= length;
 
   double asum(0);
-  OMP_PARALLEL_FOR_REDUCE( +:asum )
-  for (size_t i=0; i<length; i++) {
+  for (int i=0; i<length; i++) {
       asum += prk::abs(A[i]);
+  }
+
+  if (system_memory) {
+      free(A);
+      free(B);
+      free(C);
+  } else {
+      prk::CUDA::check( cudaFree(A) );
+      prk::CUDA::check( cudaFree(B) );
+      prk::CUDA::check( cudaFree(C) );
   }
 
   double epsilon=1.e-8;
   if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
+                << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"
                 << "       Observed checksum: " << asum << std::endl;
       std::cout << "ERROR: solution did not validate" << std::endl;
@@ -180,7 +236,7 @@ int main(int argc, char * argv[])
   } else {
       std::cout << "Solution validates" << std::endl;
       double avgtime = nstream_time/iterations;
-      double nbytes = 4.0 * length * sizeof(double);
+      double nbytes = 4.0 * length * sizeof(prk_float);
       std::cout << "Rate (MB/s): " << 1.e-6*nbytes/avgtime
                 << " Avg time (s): " << avgtime << std::endl;
   }
