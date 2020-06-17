@@ -1,2 +1,0 @@
-# PRK
-echo "PRK"
