@@ -61,6 +61,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
+#include "prk_openmp.h"
 #include "stencil_target.hpp"
 
 void nothing(const int n, const int t, const double * RESTRICT in, double * RESTRICT out)
@@ -95,7 +96,7 @@ int main(int argc, char* argv[])
       n  = std::atoi(argv[2]);
       if (n < 1) {
         throw "ERROR: grid dimension must be positive";
-      } else if (n > std::floor(std::sqrt(INT_MAX))) {
+      } else if (n > prk::get_max_matrix_size()) {
         throw "ERROR: grid dimension too large - overflow risk";
       }
 
@@ -189,7 +190,7 @@ int main(int argc, char* argv[])
       stencil(n, tile_size, in, out);
 
       // Add constant to solution to force refresh of neighbor data, if any
-      OMP_TARGET( teams distribute parallel for simd collapse(2) schedule(static,1) )
+      OMP_TARGET( teams distribute parallel for simd collapse(2) )
       for (int i=0; i<n; i++) {
         for (int j=0; j<n; j++) {
           in[i*n+j] += 1.0;
@@ -210,7 +211,7 @@ int main(int argc, char* argv[])
   OMP_PARALLEL_FOR_REDUCE( +:norm )
   for (int i=radius; i<n-radius; i++) {
     for (int j=radius; j<n-radius; j++) {
-      norm += std::fabs(out[i*n+j]);
+      norm += prk::abs(out[i*n+j]);
     }
   }
   norm /= active_points;
@@ -218,7 +219,7 @@ int main(int argc, char* argv[])
   // verify correctness
   const double epsilon = 1.0e-8;
   double reference_norm = 2.*(iterations+1.);
-  if (std::fabs(norm-reference_norm) > epsilon) {
+  if (prk::abs(norm-reference_norm) > epsilon) {
     std::cout << "ERROR: L1 norm = " << norm
               << " Reference L1 norm = " << reference_norm << std::endl;
     return 1;

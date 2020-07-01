@@ -57,8 +57,8 @@ endif
 OCCAFLAGS = -I${OCCADIR}/include -Wl,-rpath -Wl,${OCCADIR}/lib -L${OCCADIR}/lib -locca
 
 .PHONY: all clean vector valarray openmp target opencl taskloop tbb stl pstl \
-	rangefor kokkos raja cuda cublas sycl sycl-usm sycl-explicit dpcpp \
-	boost-compute thrust executor
+	rangefor kokkos raja cuda cublas sycl sycl-usm sycl-explicit dpcpp dpct \
+	boost-compute thrust executor oneapi onemkl
 
 EXTRA=
 ifeq ($(shell uname -s),Darwin)
@@ -77,7 +77,7 @@ all: sequential vector valarray openmp taskloop stl rangefor opencl sycl $(EXTRA
 sequential: p2p stencil transpose nstream dgemm sparse
 
 vector: p2p-vector p2p-hyperplane-vector stencil-vector transpose-vector nstream-vector sparse-vector dgemm-vector \
-	transpose-vector-async transpose-vector-thread
+	transpose-async transpose-thread
 
 valarray: transpose-valarray nstream-valarray
 
@@ -85,7 +85,7 @@ openmp: p2p-hyperplane-openmp p2p-tasks-openmp stencil-openmp transpose-openmp n
 
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
 
-taskloop: stencil-vector-taskloop transpose-vector-taskloop nstream-vector-taskloop
+taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
 
 mpi: nstream-mpi stencil-mpi
 
@@ -93,27 +93,27 @@ opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
 sycl: nstream-sycl p2p-hyperplane-sycl stencil-sycl transpose-sycl
 
-sycl-usm: nstream-sycl-usm stencil-sycl-usm transpose-sycl-usm
+sycl-usm: nstream-sycl-usm nstream-sycl-explicit-usm stencil-sycl-usm transpose-sycl-usm
 
 sycl-explicit: nstream-sycl-explicit transpose-sycl-explicit
 
-dpcpp: sycl sycl-usm sycl-explicit
+dpcpp: nstream-dpcpp nstream-multigpu-dpcpp transpose-dpcpp
 
-tbb: p2p-innerloop-vector-tbb p2p-vector-tbb stencil-vector-tbb transpose-vector-tbb nstream-vector-tbb \
-     p2p-hyperplane-vector-tbb p2p-tasks-tbb
+tbb: p2p-innerloop-tbb p2p-tbb stencil-tbb transpose-tbb nstream-tbb \
+     p2p-hyperplane-tbb p2p-tasks-tbb
 
-stl: stencil-vector-stl transpose-vector-stl nstream-vector-stl
+stl: stencil-stl transpose-stl nstream-stl
 
-pstl: stencil-vector-pstl transpose-vector-pstl nstream-vector-pstl
+pstl: stencil-pstl transpose-pstl nstream-pstl
 
-rangefor: stencil-vector-rangefor transpose-vector-rangefor nstream-vector-rangefor
+rangefor: stencil-rangefor transpose-rangefor nstream-rangefor
 
 executors: nstream-executors transpose-executors
 
 kokkos: stencil-kokkos transpose-kokkos nstream-kokkos
 
-raja: p2p-vector-raja stencil-vector-raja nstream-vector-raja \
-      p2p-raja transpose-raja nstream-raja stencil-raja # transpose-vector-raja
+raja: p2p-raja stencil-raja nstream-raja \
+      p2p-raja transpose-raja nstream-raja stencil-raja # transpose-raja
 
 cuda: stencil-cuda transpose-cuda nstream-cuda nstream-cuda-managed
 
@@ -126,11 +126,15 @@ cublas: transpose-cublas nstream-cublas dgemm-cublas dgemm-multigpu-cublas dgemm
 
 cblas: transpose-cblas dgemm-cblas
 
+onemkl: nstream-onemkl dgemm-onemkl dgemm-multigpu-onemkl
+
+oneapi: onemkl dpcpp sycl sycl-usm sycl-explicit sycl-explicit-usm
+
 occa: transpose-occa nstream-occa
 
-ornlacc: p2p-hyperplane-vector-ornlacc
+ornlacc: p2p-hyperplane-ornlacc
 
-boost-compute: nstream-vector-boost-compute
+boost-compute: nstream-boost-compute
 # busted
 #nstream-valarray-boost-compute
 
@@ -155,7 +159,13 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 %-celerity: %-celerity.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $(BOOSTFLAGS) $(CELERITYINC) $(MPIINC) $< $(CELERITYLIB) $(MPILIB) -o $@
 
+%-dpcpp: %-dpcpp.cc prk_util.h prk_sycl.h
+	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< -o $@
+
 %-sycl: %-sycl.cc prk_util.h prk_sycl.h
+	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< -o $@
+
+%-sycl-explicit-usm: %-sycl-explicit-usm.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< -o $@
 
 %-sycl-usm: %-sycl-usm.cc prk_util.h prk_sycl.h
@@ -163,6 +173,9 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 %-sycl-explicit: %-sycl-explicit.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< -o $@
+
+%-onemkl: %-onemkl.cc prk_util.h prk_sycl.h
+	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< $(ONEMKLFLAG) -o $@
 
 %-target: %-target.cc prk_util.h prk_openmp.h
 	$(CXX) $(CXXFLAGS) $< $(OMPFLAGS) $(TARGETFLAGS) -o $@
@@ -218,9 +231,6 @@ endif
 %-cuda: %-cuda.cu prk_util.h prk_cuda.h
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $< -o $@
 
-%-cuda-managed: %-cuda-managed.cu prk_util.h prk_cuda.h
-	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $< -o $@
-
 %-mpi-cublas: %-mpi-cublas.cu prk_util.h prk_cuda.h prk_mpi.h
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) $< -lcublas $(MPILIB) -o $@
 
@@ -263,8 +273,11 @@ clean:
 	-rm -f *-mpi
 	-rm -f *-opencl
 	-rm -f *-sycl
-	-rm -f *-sycl-explicit
 	-rm -f *-sycl-usm
+	-rm -f *-sycl-explicit
+	-rm -f *-sycl-explicit-usm
+	-rm -f *-dpct
+	-rm -f *-dpcpp
 	-rm -f *-celerity
 	-rm -f *-tbb
 	-rm -f *-stl
@@ -276,10 +289,11 @@ clean:
 	-rm -f *-cuda
 	-rm -f *-cublas
 	-rm -f *-cblas
+	-rm -f *-onemkl
 	-rm -f *-occa
 	-rm -f *-boost-compute
 	-rm -f *-ornlacc
-	-rm -f transpose-vector-async transpose-vector-thread
+	-rm -f transpose-async transpose-thread
 
 cleancl:
 	-rm -f star[123456789].cl

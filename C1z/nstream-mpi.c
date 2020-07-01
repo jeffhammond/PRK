@@ -90,7 +90,6 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  // number of times to do the transpose
   int iterations = atoi(argv[1]);
   if (iterations < 1) {
     if (me==0) printf("ERROR: iterations must be >= 1\n");
@@ -98,11 +97,10 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  // length of a the matrix
+  // length of a the vector
   size_t length = atol(argv[2]);
   if (length <= 0) {
-    if (me==0) printf("ERROR: Matrix length must be greater than 0\n");
-    MPI_Finalize();
+    printf("ERROR: Vector length must be greater than 0\n");
     return 1;
   }
 

@@ -18,7 +18,8 @@ ifeq ($(findstring musl,$(CC)),musl)
   CFLAGS += -DUSE_C11_THREADS
 endif
 
-ASMFLAGS = -fsource-asm -fverbose-asm -fasm-blocks -fcode-asm $(CFLAGS)
+#ASMFLAGS = -fsource-asm -fverbose-asm -fasm-blocks -fcode-asm $(CFLAGS)
+ASMFLAGS = -fverbose-asm $(CFLAGS)
 
 OMPFLAGS = $(OPENMPFLAG)
 TARGETFLAGS = $(OFFLOADFLAG)
@@ -49,13 +50,25 @@ endif
 
 all: serial thread openmp taskloop $(EXTRA)
 
-serial: nstream p2p p2p-hyperplane stencil transpose
+serial: nstream \
+        p2p p2p-2d p2p-tasks-2d \
+	p2p-hyperplane p2p-hyperplane-2d \
+	stencil stencil-2d \
+	transpose transpose-2d
+
+vector: p2p-sse p2p-avx p2p-avx-tasks-openmp
 
 thread: transpose-thread
 
-openmp: nstream-openmp p2p-simd-openmp p2p-tasks-openmp stencil-openmp transpose-openmp p2p-hyperplane-openmp
+openmp: nstream-openmp p2p-simd-openmp \
+	p2p-tasks-openmp p2p-tasks-2d-openmp \
+	p2p-hyperplane-openmp p2p-hyperplane-2d-openmp \
+	stencil-openmp stencil-2d-openmp \
+	transpose-openmp transpose-2d-openmp
 
 mpi: nstream-mpi
+
+petsc: nstream-petsc transpose-petsc
 
 memkind: nstream-memkind nstream-memkind-openmp
 
@@ -81,28 +94,37 @@ stencil: stencil-openmp.c prk_util.h
 transpose: transpose-openmp.c prk_util.h
 	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
 
+p2p-2d: p2p-2d.c prk_util.h
+	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
+
+%-2d: %-2d-openmp.c prk_util.h
+	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
+
 %-mpi: %-mpi.c prk_util.h
-	$(MPICC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
+	$(CC) $(CFLAGS) $(MPIINC) $< $(MPILIB) $(EXTRA_CLIBS) -o $@
+
+%-petsc: %-petsc.c prk_util.h
+	$(CC) $(CFLAGS) $(MPIINC) $< $(PETSCFLAG) $(MPILIB) $(EXTRA_CLIBS) -o $@
 
 %-memkind: %-memkind.c prk_util.h
 	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) $(MEMKINDFLAGS) -o $@
 
-%-memkind-openmp: %-memkind.c prk_util.h
+%-memkind-openmp: %-memkind.c prk_util.h prk_openmp.h
 	$(CC) $(CFLAGS) $(OMPFLAGS) $< $(EXTRA_CLIBS) $(MEMKINDFLAGS) -o $@
 
 %-mmap: %-mmap.c prk_util.h
 	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
 
-%-mmap-openmp: %-mmap.c prk_util.h
+%-mmap-openmp: %-mmap.c prk_util.h prk_openmp.h
 	$(CC) $(CFLAGS) $(OMPFLAGS) $< $(EXTRA_CLIBS) -o $@
 
-%-target: %-target.c prk_util.h
+%-target: %-target.c prk_util.h prk_openmp.h
 	$(CC) $(CFLAGS) $< $(OMPFLAGS) $(TARGETFLAGS) $(EXTRA_CLIBS) -o $@
 
-%-taskloop: %-taskloop.c prk_util.h
+%-taskloop: %-taskloop.c prk_util.h prk_openmp.h
 	$(CC) $(CFLAGS) $< $(OMPFLAGS) $(EXTRA_CLIBS) -o $@
 
-%-openmp: %-openmp.c prk_util.h
+%-openmp: %-openmp.c prk_util.h prk_openmp.h
 	$(CC) $(CFLAGS) $< $(OMPFLAGS) $(EXTRA_CLIBS) -o $@
 
 %-cilk: %-cilk.c prk_util.h
@@ -131,8 +153,11 @@ clean:
 	-rm -f *.dwarf
 	-rm -rf *.dSYM # Mac
 	-rm -f nstream p2p p2p-hyperplane stencil transpose
+	-rm -f p2p-sse p2p-avx p2p-avx3 p2p-avx-tasks-openmp
+	-rm -f *-2d
 	-rm -f *-openmp
 	-rm -f *-mpi
+	-rm -f *-petsc
 	-rm -f *-target
 	-rm -f *-taskloop
 	-rm -f *-cilk

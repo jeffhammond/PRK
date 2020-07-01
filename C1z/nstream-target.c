@@ -64,6 +64,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
+#include "prk_openmp.h"
 
 int main(int argc, char * argv[])
 {
@@ -79,17 +80,16 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  // number of times to do the transpose
   int iterations = atoi(argv[1]);
   if (iterations < 1) {
     printf("ERROR: iterations must be >= 1\n");
     return 1;
   }
 
-  // length of a the matrix
+  // length of a the vector
   size_t length = atol(argv[2]);
   if (length <= 0) {
-    printf("ERROR: Matrix length must be greater than 0\n");
+    printf("ERROR: Vector length must be greater than 0\n");
     return 1;
   }
 
