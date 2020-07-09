@@ -129,7 +129,7 @@ int main(int argc, char * argv[])
 
       if (iter==1) nstream_time = prk_wtime();
 
-      #pragma omp target teams distribute parallel for simd schedule(static) // device(device)
+      #pragma omp target teams distribute parallel for simd schedule(static) device(device)
       for (size_t i=0; i<length; i++) {
           A[i] += B[i] + scalar * C[i];
       }
