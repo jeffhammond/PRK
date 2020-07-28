@@ -97,7 +97,7 @@ sycl-usm: nstream-sycl-usm nstream-sycl-explicit-usm stencil-sycl-usm transpose-
 
 sycl-explicit: nstream-sycl-explicit transpose-sycl-explicit
 
-dpcpp: nstream-dpcpp transpose-dpcpp
+dpcpp: nstream-dpcpp nstream-multigpu-dpcpp transpose-dpcpp
 
 tbb: p2p-innerloop-tbb p2p-tbb stencil-tbb transpose-tbb nstream-tbb \
      p2p-hyperplane-tbb p2p-tasks-tbb
@@ -128,7 +128,7 @@ cblas: transpose-cblas dgemm-cblas
 
 onemkl: nstream-onemkl dgemm-onemkl dgemm-multigpu-onemkl
 
-oneapi: onemkl dpcpp sycl sycl-usm sycl-explicit
+oneapi: onemkl dpcpp sycl sycl-usm sycl-explicit sycl-explicit-usm
 
 occa: transpose-occa nstream-occa
 
