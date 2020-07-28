@@ -6,7 +6,33 @@
 
 #include "CL/sycl.hpp"
 
+#ifdef __COMPUTECPP__
+#include "SYCL/experimental/usm.h"
+#endif
+
 namespace sycl = cl::sycl;
+
+#ifdef __COMPUTECPP__
+namespace syclx = cl::sycl::experimental;
+#else
+namespace syclx = cl::sycl;
+#endif
+
+#ifdef PRK_SYCL_USE_FLOAT
+typedef float prk_float;
+#else
+typedef double prk_float;
+#endif
+
+#ifdef __SYCL_DEVICE_ONLY__
+#define OPENCL_CONSTANT __attribute__((opencl_constant))
+#else
+#define OPENCL_CONSTANT
+#endif
+
+// EXAMPLE OF PRINTF DEBUGGING IN SYCL DEVICE CODE
+//static const OPENCL_CONSTANT char format[] = "%d:%lf,%lf,%lf\n";
+//sycl::intel::experimental::printf(format, g, p_A[i], p_B[i], p_C[i]);
 
 // prebuilt kernels are not required/not fully supported on hipSYCL and triSYCL
 #if defined(TRISYCL) || defined(__HIPSYCL__) || defined(DPCPP)
@@ -15,34 +41,11 @@ namespace sycl = cl::sycl;
 #define PREBUILD_KERNEL 1
 #endif
 
-// not all SYCL implementations may support all device types.
-// If an implementation does not find any devices based on a
-// device selector, it will throw an exception.
-// These macros can be used to check if there's any chance
-// of an implementation targeting a CPU and GPU.
-#if !defined(__HIPSYCL__) || defined(HIPSYCL_PLATFORM_CPU)
-#define SYCL_TRY_CPU_QUEUE 1
-#else
-#define SYCL_TRY_CPU_QUEUE 0
-#endif
-
-// !defined(HIPSYCL_PLATFORM_CPU) = !( defined(HIPSYCL_PLATFORM_CUDA) || defined(HIPSYCL_PLATFORM_HCC) )
-#if !defined(__HIPSYCL__) || !defined(HIPSYCL_PLATFORM_CPU)
-#define SYCL_TRY_GPU_QUEUE 1
-#else
-#define SYCL_TRY_GPU_QUEUE 0
-#endif
-
-#if 0
-#include "prk_opencl.h"
-#define USE_OPENCL 1
-#endif
-
 namespace prk {
 
     // There seems to be an issue with the clang CUDA/HIP toolchains not having
     // std::abort() available
-    void abort(void) {
+    void Abort(void) {
 #if defined(HIPSYCL_PLATFORM_CUDA) || defined(HIPSYCL_PLATFORM_HCC)
         abort();
 #else
@@ -53,7 +56,7 @@ namespace prk {
     namespace SYCL {
 
         void print_device_platform(const sycl::queue & q) {
-#if !defined(TRISYCL) && !defined(__HIPSYCL__)
+#if ! ( defined(TRISYCL) || defined(__HIPSYCL__) )
             auto device      = q.get_device();
             auto platform    = device.get_platform();
             std::cout << "SYCL Device:   " << device.get_info<sycl::info::device::name>() << std::endl;
@@ -61,29 +64,12 @@ namespace prk {
 #endif
         }
 
-        bool has_spir(const sycl::queue & q) {
-#if !defined(TRISYCL) && !defined(__HIPSYCL__)
-            auto device = q.get_device();
-            return device.has_extension(sycl::string_class("cl_khr_spir"));
-#else
-            return true;
-#endif
-        }
-
-        bool has_ptx(const sycl::queue & q) {
-#ifdef __COMPUTECPP__
-            return true;
-#else
-            return false;
-#endif
-        }
-
         bool has_fp64(const sycl::queue & q) {
-#if !defined(TRISYCL) && !defined(__HIPSYCL__)
+#if defined(TRISYCL) || defined(__HIPSYCL__)
+            return true;
+#else
             auto device      = q.get_device();
             return device.has_extension(sycl::string_class("cl_khr_fp64"));
-#else
-            return true;
 #endif
         }
 

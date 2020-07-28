@@ -78,7 +78,7 @@ void nothing(sycl::queue & q, const size_t n, sycl::buffer<T> & d_in, sycl::buff
     std::cout << "You are trying to use a stencil that does not exist.\n";
     std::cout << "Please generate the new stencil using the code generator\n";
     std::cout << "and add it to the case-switch in the driver." << std::endl;
-    prk::abort();
+    prk::Abort();
 }
 
 template <typename T>
@@ -208,7 +208,7 @@ void run(sycl::queue & q, int iterations, size_t n, size_t tile_size, bool star,
   double norm(0);
   for (int i=radius; i<n-radius; i++) {
     for (int j=radius; j<n-radius; j++) {
-      norm += std::fabs(h_out[i*n+j]);
+      norm += prk::abs(h_out[i*n+j]);
     }
   }
   norm /= active_points;
@@ -216,7 +216,7 @@ void run(sycl::queue & q, int iterations, size_t n, size_t tile_size, bool star,
   // verify correctness
   const double epsilon = 1.0e-8;
   const double reference_norm = 2*(iterations+1);
-  if (std::fabs(norm-reference_norm) > epsilon) {
+  if (prk::abs(norm-reference_norm) > epsilon) {
     std::cout << "ERROR: L1 norm = " << norm
               << " Reference L1 norm = " << reference_norm << std::endl;
   } else {
@@ -262,7 +262,7 @@ int main(int argc, char * argv[])
       n  = std::atoi(argv[2]);
       if (n < 1) {
         throw "ERROR: grid dimension must be positive";
-      } else if (n > std::floor(std::sqrt(INT_MAX))) {
+      } else if (n > prk::get_max_matrix_size()) {
         throw "ERROR: grid dimension too large - overflow risk";
       }
 
@@ -305,67 +305,64 @@ int main(int argc, char * argv[])
   /// Setup SYCL environment
   //////////////////////////////////////////////////////////////////////
 
-#ifdef USE_OPENCL
-  prk::opencl::listPlatforms();
-#endif
-
   try {
-#if SYCL_TRY_CPU_QUEUE
     if (n<10000) {
-        sycl::queue q(sycl::host_selector{});
-        prk::SYCL::print_device_platform(q);
-        run<float>(q, iterations, n, tile_size, star, radius);
-        run<double>(q, iterations, n, tile_size, star, radius);
+      sycl::queue q(sycl::host_selector{});
+      prk::SYCL::print_device_platform(q);
+      run<float>(q, iterations, n, tile_size, star, radius);
+      run<double>(q, iterations, n, tile_size, star, radius);
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
-#endif
-
-    // CPU requires spir64 target
-#if SYCL_TRY_CPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::cpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        if (has_spir) {
-          run<float>(q, iterations, n, tile_size, star, radius);
-          run<double>(q, iterations, n, tile_size, star, radius);
-        }
-    }
-#endif
-
-    // NVIDIA GPU requires ptx64 target
-#if SYCL_TRY_GPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::gpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        bool has_fp64 = prk::SYCL::has_fp64(q);
-        bool has_ptx  = prk::SYCL::has_ptx(q);
-        if (!has_fp64) {
-          std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
-        }
-        if (has_spir || has_ptx) {
-          run<float>(q, iterations, n, tile_size, star, radius);
-          if (has_fp64) {
-            run<double>(q, iterations, n, tile_size, star, radius);
-          }
-        }
-    }
-#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
-    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
-    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
-    return 1;
+  }
+
+  try {
+    sycl::queue q(sycl::cpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    run<float>(q, iterations, n, tile_size, star, radius);
+    run<double>(q, iterations, n, tile_size, star, radius);
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
+  }
+
+  try {
+    sycl::queue q(sycl::gpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    bool has_fp64 = prk::SYCL::has_fp64(q);
+    run<float>(q, iterations, n, tile_size, star, radius);
+    if (has_fp64) {
+      run<double>(q, iterations, n, tile_size, star, radius);
+    } else {
+      std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
+    }
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
   }
 
   return 0;

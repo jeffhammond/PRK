@@ -63,6 +63,9 @@
 #include "prk_util.h"
 #include "p2p-kernel.h"
 
+class sweep;
+class corner;
+
 int main(int argc, char* argv[])
 {
   std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
@@ -134,7 +137,7 @@ int main(int argc, char* argv[])
   {
     sycl::buffer<double> d_grid { h_grid.data(), h_grid.size() };
 
-    for (auto iter = 0; iter<=iterations; iter++) {
+    for (int iter = 0; iter<=iterations; iter++) {
 
       if (iter==1) pipeline_time = prk::wtime();
 
@@ -195,7 +198,7 @@ int main(int argc, char* argv[])
 
   const double epsilon = 1.e-8;
   auto corner_val = ((iterations+1.)*(2.*n-2.));
-  if ( (std::fabs(h_grid[(n-1)*n+(n-1)] - corner_val)/corner_val) > epsilon) {
+  if ( (prk::abs(h_grid[(n-1)*n+(n-1)] - corner_val)/corner_val) > epsilon) {
     std::cout << "ERROR: checksum " << h_grid[(n-1)*n+(n-1)]
               << " does not match verification value " << corner_val << std::endl;
     return 1;

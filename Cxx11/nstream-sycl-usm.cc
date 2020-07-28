@@ -74,17 +74,16 @@ void run(sycl::queue & q, int iterations, size_t length)
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
+  auto ctx = q.get_context();
+
   double nstream_time(0);
 
   const T scalar(3);
 
   T * A;
-  T * B;
-  T * C;
 
   try {
 
-    auto ctx = q.get_context();
     auto dev = q.get_device();
 
 #if PREBUILD_KERNEL
@@ -92,9 +91,9 @@ void run(sycl::queue & q, int iterations, size_t length)
     kernel.build_with_kernel_type<nstream<T>>();
 #endif
 
-    A = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
-    B = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
-    C = static_cast<T*>(sycl::malloc_shared(length * sizeof(T), dev, ctx));
+    A = static_cast<T*>(syclx::malloc_shared(length * sizeof(T), dev, ctx));
+    T * B = static_cast<T*>(syclx::malloc_shared(length * sizeof(T), dev, ctx));
+    T * C = static_cast<T*>(syclx::malloc_shared(length * sizeof(T), dev, ctx));
 
     for (size_t i=0; i<length; i++) {
       A[i] = 0.0;
@@ -124,9 +123,8 @@ void run(sycl::queue & q, int iterations, size_t length)
     // for other device-oriented programming models.
     nstream_time = prk::wtime() - nstream_time;
 
-    sycl::free(A, ctx);
-    sycl::free(B, ctx);
-    sycl::free(C, ctx);
+    syclx::free(B, ctx);
+    syclx::free(C, ctx);
 
   }
   catch (sycl::exception & e) {
@@ -158,11 +156,13 @@ void run(sycl::queue & q, int iterations, size_t length)
 
   double asum(0);
   for (size_t i=0; i<length; ++i) {
-      asum += std::fabs(A[i]);
+      asum += prk::abs(A[i]);
   }
 
+  syclx::free(A, ctx);
+
   const double epsilon(1.e-8);
-  if (std::fabs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"
@@ -222,67 +222,64 @@ int main(int argc, char * argv[])
   /// Setup SYCL environment
   //////////////////////////////////////////////////////////////////////
 
-#ifdef USE_OPENCL
-  prk::opencl::listPlatforms();
-#endif
-
   try {
-#if SYCL_TRY_CPU_QUEUE
     if (length<100000) {
-        sycl::queue q(sycl::host_selector{});
-        prk::SYCL::print_device_platform(q);
-        run<float>(q, iterations, length);
-        run<double>(q, iterations, length);
+      sycl::queue q(sycl::host_selector{});
+      prk::SYCL::print_device_platform(q);
+      run<float>(q, iterations, length);
+      run<double>(q, iterations, length);
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
-#endif
-
-    // CPU requires spir64 target
-#if SYCL_TRY_CPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::cpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        if (has_spir) {
-          run<float>(q, iterations, length);
-          run<double>(q, iterations, length);
-        }
-    }
-#endif
-
-    // NVIDIA GPU requires ptx64 target
-#if SYCL_TRY_GPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::gpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        bool has_fp64 = prk::SYCL::has_fp64(q);
-        bool has_ptx  = prk::SYCL::has_ptx(q);
-        if (!has_fp64) {
-          std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
-        }
-        if (has_spir || has_ptx) {
-          run<float>(q, iterations, length);
-          if (has_fp64) {
-            run<double>(q, iterations, length);
-          }
-        }
-    }
-#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
-    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
-    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
-    return 1;
+  }
+
+  try {
+    sycl::queue q(sycl::cpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    run<float>(q, iterations, length);
+    run<double>(q, iterations, length);
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
+  }
+
+  try {
+    sycl::queue q(sycl::gpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    bool has_fp64 = prk::SYCL::has_fp64(q);
+    run<float>(q, iterations, length);
+    if (has_fp64) {
+      run<double>(q, iterations, length);
+    } else {
+      std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
+    }
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
   }
 
   return 0;

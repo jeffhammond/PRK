@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2013, Intel Corporation
+/// Copyright (c) 2020, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -63,26 +63,18 @@ void run(sycl::queue & q, int iterations, size_t order)
 
   double trans_time(0);
 
-  auto ctx = q.get_context();
-  auto dev = q.get_device();
-
-  T * A = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
-  T * B = static_cast<T*>(sycl::malloc_shared(order*order * sizeof(T), dev, ctx));
-
-  for (auto i=0;i<order; i++) {
-    for (auto j=0;j<order;j++) {
-      A[i*order+j] = static_cast<double>(i*order+j);
-      B[i*order+j] = 0.0;
-    }
-  }
+  T * B = static_cast<T*>(syclx::malloc_shared(order*order * sizeof(T), q));
 
   try {
 
-#if PREBUILD_KERNEL
-    sycl::program kernel(ctx);
-    kernel.build_with_kernel_type<transpose<T>>();
-#endif
+    T * A = static_cast<T*>(syclx::malloc_shared(order*order * sizeof(T), q));
 
+    for (int i=0;i<order; i++) {
+      for (int j=0;j<order;j++) {
+        A[i*order+j] = static_cast<double>(i*order+j);
+        B[i*order+j] = 0.0;
+      }
+    }
 
     for (int iter = 0; iter<=iterations; ++iter) {
 
@@ -91,9 +83,6 @@ void run(sycl::queue & q, int iterations, size_t order)
       q.submit([&](sycl::handler& h) {
 
         h.parallel_for<class transpose<T>>(
-#if PREBUILD_KERNEL
-                kernel.get_kernel<transpose<T>>(),
-#endif
                 sycl::range<2>{order,order}, [=] (sycl::id<2> it) {
 #if USE_2D_INDEXING
           sycl::id<2> ij{it[0],it[1]};
@@ -113,6 +102,8 @@ void run(sycl::queue & q, int iterations, size_t order)
     // since that will move data, and we do not time that
     // for other device-oriented programming models.
     trans_time = prk::wtime() - trans_time;
+
+    syclx::free(A, q);
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
@@ -128,9 +119,6 @@ void run(sycl::queue & q, int iterations, size_t order)
     return;
   }
 
-  sycl::free(A, ctx);
-  sycl::free(B, ctx);
-
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
@@ -143,7 +131,7 @@ void run(sycl::queue & q, int iterations, size_t order)
       size_t const ij = i*order+j;
       size_t const ji = j*order+i;
       const T reference = static_cast<T>(ij)*(1.+iterations)+addit;
-      abserr += std::fabs(B[ji] - reference);
+      abserr += prk::abs(B[ji] - reference);
     }
   }
 
@@ -163,6 +151,9 @@ void run(sycl::queue & q, int iterations, size_t order)
     std::cout << "ERROR: Aggregate squared error " << abserr
               << " exceeds threshold " << epsilon << std::endl;
   }
+
+  syclx::free(B, q);
+
 }
 
 int main(int argc, char * argv[])
@@ -191,7 +182,7 @@ int main(int argc, char * argv[])
       order = std::atoi(argv[2]);
       if (order <= 0) {
         throw "ERROR: Matrix Order must be greater than 0";
-      } else if (order > std::floor(std::sqrt(INT_MAX))) {
+      } else if (order > prk::get_max_matrix_size()) {
         throw "ERROR: matrix dimension too large - overflow risk";
       }
   }
@@ -207,67 +198,64 @@ int main(int argc, char * argv[])
   /// Setup SYCL environment
   //////////////////////////////////////////////////////////////////////
 
-#ifdef USE_OPENCL
-  prk::opencl::listPlatforms();
-#endif
-
   try {
-#if SYCL_TRY_CPU_QUEUE
     if (order<10000) {
-        sycl::queue q(sycl::host_selector{});
-        prk::SYCL::print_device_platform(q);
-        run<float>(q, iterations, order);
-        run<double>(q, iterations, order);
+      sycl::queue q(sycl::host_selector{});
+      prk::SYCL::print_device_platform(q);
+      run<float>(q, iterations, order);
+      run<double>(q, iterations, order);
     } else {
         std::cout << "Skipping host device since it is too slow for large problems" << std::endl;
     }
-#endif
-
-    // CPU requires spir64 target
-#if SYCL_TRY_CPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::cpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        if (has_spir) {
-          run<float>(q, iterations, order);
-          run<double>(q, iterations, order);
-        }
-    }
-#endif
-
-    // NVIDIA GPU requires ptx64 target
-#if SYCL_TRY_GPU_QUEUE
-    if (1) {
-        sycl::queue q(sycl::gpu_selector{});
-        prk::SYCL::print_device_platform(q);
-        bool has_spir = prk::SYCL::has_spir(q);
-        bool has_fp64 = prk::SYCL::has_fp64(q);
-        bool has_ptx  = prk::SYCL::has_ptx(q);
-        if (!has_fp64) {
-          std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
-        }
-        if (has_spir || has_ptx) {
-          run<float>(q, iterations, order);
-          if (has_fp64) {
-            run<double>(q, iterations, order);
-          }
-        }
-    }
-#endif
   }
   catch (sycl::exception & e) {
     std::cout << e.what() << std::endl;
     prk::SYCL::print_exception_details(e);
-    return 1;
   }
   catch (std::exception & e) {
     std::cout << e.what() << std::endl;
-    return 1;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
-    return 1;
+  }
+
+  try {
+    sycl::queue q(sycl::cpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    run<float>(q, iterations, order);
+    run<double>(q, iterations, order);
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
+  }
+
+  try {
+    sycl::queue q(sycl::gpu_selector{});
+    prk::SYCL::print_device_platform(q);
+    bool has_fp64 = prk::SYCL::has_fp64(q);
+    run<float>(q, iterations, order);
+    if (has_fp64) {
+      run<double>(q, iterations, order);
+    } else {
+      std::cout << "SYCL GPU device lacks FP64 support." << std::endl;
+    }
+  }
+  catch (sycl::exception & e) {
+    std::cout << e.what() << std::endl;
+    prk::SYCL::print_exception_details(e);
+  }
+  catch (std::exception & e) {
+    std::cout << e.what() << std::endl;
+  }
+  catch (const char * e) {
+    std::cout << e << std::endl;
   }
 
   return 0;

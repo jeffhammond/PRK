@@ -13,11 +13,16 @@ STARFLAG = $(XLFPP)-DSTAR
 FCFLAGS  = $(DEFAULT_OPT_FLAGS)
 FCFLAGS += $(XLFPP)-DRADIUS=$(RADIUS) $(STARFLAG)
 
+BLASFLAGS = $(BLASFLAG)
+
 ifeq ($(findstring ifort,$(FC)),ifort)
   BLASFLAGS += -heap-arrays
 endif
+ifeq ($(findstring ifx,$(FC)),ifx)
+  BLASFLAGS += -heap-arrays
+endif
 
-.PHONY: all clean serial pretty openmp coarray target ornlacc
+.PHONY: all clean serial pretty openmp coarray target ornlacc ga
 
 # Intel
 ifeq ($(findstring ifort,$(FC)),ifort)
@@ -59,9 +64,13 @@ taskloop: stencil-taskloop-openmp transpose-taskloop-openmp nstream-taskloop-ope
 
 coarray: p2p-coarray stencil-coarray transpose-coarray
 
+ga: nstream-ga transpose-ga dgemm-ga
+
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target dgemm-openmp-target
 
 ornlacc: p2p-ornlacc p2p-innerloop-ornlacc stencil-ornlacc transpose-ornlacc nstream-ornlacc
+
+blas: dgemm-mkl
 
 %: %.F90
 	$(FC) $(FCFLAGS) $< -o $@
@@ -73,6 +82,9 @@ stencil: stencil.F90 stencil_serial.F90
 dgemm-pretty: dgemm-pretty.F90
 	$(FC) $(FCFLAGS) $(BLASFLAGS) $< -o $@
 
+dgemm-blas: dgemm-blas.F90
+	$(FC) $(FCFLAGS) $(BLASFLAGS) $< -o $@
+
 %-pretty: %-pretty.F90
 	$(FC) $(FCFLAGS) $< -o $@
 
@@ -81,6 +93,9 @@ dgemm-pretty: dgemm-pretty.F90
 
 %-openmp: %-openmp.F90
 	$(FC) $(FCFLAGS) $(OPENMPFLAG) $< -o $@
+
+%-ga: %-ga.F90
+	$(FC) $(FCFLAGS) $< $(GAFLAG) -o $@
 
 %-coarray: %-coarray.F90
 	$(CAFC) $(FCFLAGS) $< $(COARRAYFLAG) -o $@
@@ -103,7 +118,9 @@ clean:
 	-rm -f p2p stencil transpose nstream dgemm
 	-rm -f p2p-innerloop
 	-rm -f *-pretty
+	-rm -f *-blas
 	-rm -f *-coarray
+	-rm -f *-ga
 	-rm -f *-openmp
 	-rm -f *-target
 	-rm -f *-ornlacc
