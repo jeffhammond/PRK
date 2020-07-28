@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2015, Intel Corporation
+# Copyright (c) 2017, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,22 +32,35 @@
 
 #*******************************************************************
 #
-# NAME:    dgemm
+# NAME:    nstream
 #
-# PURPOSE: This program tests the efficiency with which a dense matrix
-#          dense multiplication is carried out
+# PURPOSE: To compute memory bandwidth when adding a vector of a given
+#          number of double precision values to the scalar multiple of
+#          another vector of the same length, and storing the result in
+#          a third vector.
 #
-# USAGE:   The program takes as input the matrix order,
-#          the number of times the matrix-matrix multiplication 
-#          is carried out.
+# USAGE:   The program takes as input the number
+#          of iterations to loop over the triad vectors, the length of the
+#          vectors, and the offset between vectors
 #
-#          <progname> <# iterations> <matrix order>
+#          <progname> <# iterations> <vector length> <offset>
 #
-#          The output consists of diagnostics to make sure the 
+#          The output consists of diagnostics to make sure the
 #          algorithm worked, and of timing statistics.
 #
-# HISTORY: Written by Rob Van der Wijngaart, February 2009.
-#          Converted to Python by Jeff Hammond, February 2016.
+# NOTES:   Bandwidth is determined as the number of words read, plus the
+#          number of words written, times the size of the words, divided
+#          by the execution time. For a vector length of N, the total
+#          number of words read and written is 4*N*sizeof(double).
+#
+#
+# HISTORY: This code is loosely based on the Stream benchmark by John
+#          McCalpin, but does not follow all the Stream rules. Hence,
+#          reported results should not be associated with Stream in
+#          external publications
+#
+#          Converted to Python by Jeff Hammond, October 2017.
+#
 # *******************************************************************
 
 import sys
@@ -56,8 +69,24 @@ if sys.version_info >= (3, 3):
     from time import process_time as timer
 else:
     from timeit import default_timer as timer
+from numba import jit
 import numpy
 print('Numpy version  = ', numpy.version.version)
+
+
+@jit
+def nstream(length,A, B, C, scalar):
+    # range vs ndindex makes no difference on performance
+    #for i in range(0,length):
+    for i in numpy.ndindex(length):
+        A[i] += B[i] + scalar * C[i]
+
+    # this is slower
+    #A += B + scalar * C
+
+    # this is slowest
+    #A[:] += B[:] + scalar * C[:]
+
 
 def main():
 
@@ -66,59 +95,76 @@ def main():
     # ********************************************************************
 
     print('Parallel Research Kernels version ') #, PRKVERSION
-    print('Python Dense matrix-matrix multiplication: C = A x B')
+    print('Python Numpy STREAM triad: A = B + scalar * C')
 
     if len(sys.argv) != 3:
         print('argument count = ', len(sys.argv))
-        sys.exit("Usage: ./dgemm <# iterations> <matrix order>")
+        sys.exit("Usage: python nstream.py <# iterations> <vector length>")
 
     iterations = int(sys.argv[1])
     if iterations < 1:
         sys.exit("ERROR: iterations must be >= 1")
 
-    order = int(sys.argv[2])
-    if order < 1:
-        sys.exit("ERROR: order must be >= 1")
+    length = int(sys.argv[2])
+    if length < 1:
+        sys.exit("ERROR: length must be positive")
+
+    #offset = int(sys.argv[3])
+    #if offset < 0:
+    #    sys.exit("ERROR: offset must be nonnegative")
 
     print('Number of iterations = ', iterations)
-    print('Matrix order         = ', order)
+    print('Vector length        = ', length)
+    #print('Offset               = ', offset)
 
     # ********************************************************************
-    # ** Allocate space for the input and transpose matrix
+    # ** Allocate space for the input and execute STREAM triad
     # ********************************************************************
 
-    A = numpy.fromfunction(lambda i,j: j, (order,order), dtype=float)
-    B = numpy.fromfunction(lambda i,j: j, (order,order), dtype=float)
-    C = numpy.zeros((order,order))
+    # 0.0 is a float, which is 64b (53b of precision)
+    A = numpy.zeros(length)
+    B = numpy.full(length,2.0)
+    C = numpy.full(length,2.0)
+
+    scalar = 3.0
 
     for k in range(0,iterations+1):
 
         if k<1: t0 = timer()
 
-        #C += numpy.matmul(A,B) # requires Numpy 1.10 or later
-        C += numpy.dot(A,B)
+        #A += B + scalar * C
+        nstream(length,A,B,C,scalar)
+
 
     t1 = timer()
-    dgemm_time = t1 - t0
+    nstream_time = t1 - t0
 
     # ********************************************************************
     # ** Analyze and output results.
     # ********************************************************************
 
-    checksum = numpy.linalg.norm(numpy.reshape(C,order*order),ord=1)
+    ar = 0.0
+    br = 2.0
+    cr = 2.0
+    ref = 0.0
+    for k in range(0,iterations+1):
+        ar += br + scalar * cr
 
-    ref_checksum = 0.25*order*order*order*(order-1.0)*(order-1.0)
-    ref_checksum *= (iterations+1)
+    ar *= length
+
+    asum = numpy.linalg.norm(A, ord=1)
 
     epsilon=1.e-8
-    if abs((checksum - ref_checksum)/ref_checksum) < epsilon:
-        print('Solution validates')
-        avgtime = dgemm_time/iterations
-        nflops = 2.0*order*order*order
-        print('Rate (MF/s): ',1.e-6*nflops/avgtime, ' Avg time (s): ', avgtime)
-    else:
-        print('ERROR: Checksum = ', checksum,', Reference checksum = ', ref_checksum,'\n')
+    if abs(ar-asum)/asum > epsilon:
+        print('Failed Validation on output array');
+        print('        Expected checksum: ',ar);
+        print('        Observed checksum: ',asum);
         sys.exit("ERROR: solution did not validate")
+    else:
+        print('Solution validates')
+        avgtime = nstream_time/iterations
+        nbytes = 4.0 * length * 8 # 8 is not sizeof(double) in bytes, but allows for comparison to C etc.
+        print('Rate (MB/s): ',1.e-6*nbytes/avgtime, ' Avg time (s): ', avgtime)
 
 
 if __name__ == '__main__':

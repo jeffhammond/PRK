@@ -32,21 +32,20 @@
 
 #*******************************************************************
 #
-# NAME:    dgemm
+# NAME:    transpose
 #
-# PURPOSE: This program tests the efficiency with which a dense matrix
-#          dense multiplication is carried out
+# PURPOSE: This program measures the time for the transpose of a
+#          column-major stored matrix into a row-major stored matrix.
 #
-# USAGE:   The program takes as input the matrix order,
-#          the number of times the matrix-matrix multiplication 
-#          is carried out.
+# USAGE:   Program input is the matrix order and the number of times to
+#          repeat the operation:
 #
-#          <progname> <# iterations> <matrix order>
+#          transpose <# iterations> <matrix_size>
 #
-#          The output consists of diagnostics to make sure the 
-#          algorithm worked, and of timing statistics.
+#          The output consists of diagnostics to make sure the
+#          transpose worked and timing statistics.
 #
-# HISTORY: Written by Rob Van der Wijngaart, February 2009.
+# HISTORY: Written by  Rob Van der Wijngaart, February 2009.
 #          Converted to Python by Jeff Hammond, February 2016.
 # *******************************************************************
 
@@ -56,8 +55,31 @@ if sys.version_info >= (3, 3):
     from time import process_time as timer
 else:
     from timeit import default_timer as timer
+from numba import jit
 import numpy
 print('Numpy version  = ', numpy.version.version)
+
+#################################
+# all of these perform terribly #
+#################################
+@jit
+def transpose(order,A,B):
+    for i,j in numpy.ndindex(order,order):
+        B[i,j] += A[j,i]
+
+@jit
+def add(order,A,value):
+    for i,j in numpy.ndindex(order,order):
+        A[i,j] += value
+
+@jit
+def kernel(order,A,B):
+    #B += A.T
+    #A += 1.0
+    #B += numpy.transpose(A)
+    numpy.add(B,numpy.transpose(A),B)
+    numpy.add(A,1.0,A)
+
 
 def main():
 
@@ -66,11 +88,11 @@ def main():
     # ********************************************************************
 
     print('Parallel Research Kernels version ') #, PRKVERSION
-    print('Python Dense matrix-matrix multiplication: C = A x B')
+    print('Python Numpy Matrix transpose: B = A^T')
 
     if len(sys.argv) != 3:
         print('argument count = ', len(sys.argv))
-        sys.exit("Usage: ./dgemm <# iterations> <matrix order>")
+        sys.exit("Usage: ./transpose <# iterations> <matrix order>")
 
     iterations = int(sys.argv[1])
     if iterations < 1:
@@ -87,37 +109,35 @@ def main():
     # ** Allocate space for the input and transpose matrix
     # ********************************************************************
 
-    A = numpy.fromfunction(lambda i,j: j, (order,order), dtype=float)
-    B = numpy.fromfunction(lambda i,j: j, (order,order), dtype=float)
-    C = numpy.zeros((order,order))
+    A = numpy.fromfunction(lambda i,j: i*order+j, (order,order), dtype=float)
+    B = numpy.zeros((order,order))
 
     for k in range(0,iterations+1):
 
         if k<1: t0 = timer()
 
-        #C += numpy.matmul(A,B) # requires Numpy 1.10 or later
-        C += numpy.dot(A,B)
+        transpose(order,A,B)
+        add(order,A,1.0)
+        #kernel(order,A,B)
 
     t1 = timer()
-    dgemm_time = t1 - t0
+    trans_time = t1 - t0
 
     # ********************************************************************
     # ** Analyze and output results.
     # ********************************************************************
 
-    checksum = numpy.linalg.norm(numpy.reshape(C,order*order),ord=1)
-
-    ref_checksum = 0.25*order*order*order*(order-1.0)*(order-1.0)
-    ref_checksum *= (iterations+1)
+    A = numpy.fromfunction(lambda i,j: ((iterations/2.0)+(order*j+i))*(iterations+1.0), (order,order), dtype=float)
+    abserr = numpy.linalg.norm(numpy.reshape(B-A,order*order),ord=1)
 
     epsilon=1.e-8
-    if abs((checksum - ref_checksum)/ref_checksum) < epsilon:
+    nbytes = 2 * order**2 * 8 # 8 is not sizeof(double) in bytes, but allows for comparison to C etc.
+    if abserr < epsilon:
         print('Solution validates')
-        avgtime = dgemm_time/iterations
-        nflops = 2.0*order*order*order
-        print('Rate (MF/s): ',1.e-6*nflops/avgtime, ' Avg time (s): ', avgtime)
+        avgtime = trans_time/iterations
+        print('Rate (MB/s): ',1.e-6*nbytes/avgtime, ' Avg time (s): ', avgtime)
     else:
-        print('ERROR: Checksum = ', checksum,', Reference checksum = ', ref_checksum,'\n')
+        print('error ',abserr, ' exceeds threshold ',epsilon)
         sys.exit("ERROR: solution did not validate")
 
 

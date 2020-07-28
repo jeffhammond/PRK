@@ -140,11 +140,10 @@ program main
   do i=1, order
     A(:,i) = real(i-1,REAL64)
     B(:,i) = real(i-1,REAL64)
-    C(:,i) = real(0,REAL64)
   enddo
-  C = 0
+  C = 0.0d0
 
-  t0 = 0
+  t0 = 0.0d0
 
   do k=0,iterations
     if (k.eq.1) t0 = prk_get_wtime()
