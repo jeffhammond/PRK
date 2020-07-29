@@ -96,7 +96,7 @@ int main(int argc, char * argv[])
   }
 
   int device = (argc > 3) ? atol(argv[3]) : omp_get_default_device();
-  if ( (device < 0 || omp_get_num_devices() <= device ) && (device != omp_get_default_device()) ) {
+  if ( (device < 0 || omp_get_num_devices() <= device ) && (device != omp_get_initial_device()) ) {
     printf("ERROR: device number %d is not valid.\n", device);
     return 1;
   }
@@ -104,6 +104,7 @@ int main(int argc, char * argv[])
   printf("Number of iterations = %d\n", iterations);
   printf("Vector length        = %zu\n", length);
   printf("OpenMP Device        = %d\n", device);
+  printf("OpenMP Host Device   = %d\n", omp_get_initial_device());
 
   //////////////////////////////////////////////////////////////////////
   // Allocate space and perform the computation
