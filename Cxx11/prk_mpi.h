@@ -208,7 +208,13 @@ namespace prk
                     std::vector<size_t> global_sizes(np_);   // in
                     global_offsets_.resize(np_);             // out
                     prk::MPI::check( MPI_Allgather(&local_size_, 1, dt, global_sizes.data(), 1, dt, comm_) );
+#if PRK_NO_EXCLUSIVE_SCAN
+                    std::partial_sum( global_sizes.cbegin(), global_sizes.cend(), global_offsets_.begin() );
+                    const size_t c = global_offsets_[0];
+                    std::transform( global_sizes.cbegin(), global_sizes.cend(), global_offsets_.begin(), [&](size_t i) { return i-=c; });
+#else
                     std::exclusive_scan( global_sizes.cbegin(), global_sizes.cend(), global_offsets_.begin(), 0);
+#endif
                 }
                 my_global_offset_begin_ = global_offsets_[me_];
                 my_global_offset_end_   = (me_ != np_-1) ? global_offsets_[me_+1] : global_size_;
@@ -294,7 +300,7 @@ namespace prk
                 return local_pointer_[local_offset];
             }
 
-            constexpr T * data(void) noexcept
+            const T * data(void) noexcept
             {
                 return local_pointer_;
             }
