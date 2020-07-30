@@ -57,6 +57,27 @@ time make -j4 sycl-toolchain
 time make -j4 sycl-toolchain install #DESTDIR=/opt/isycl
 ```
 
+### Build from source - NVIDIA version
+
+```sh
+#!/bin/bash
+
+export SYCL_HOME=$HOME/ISYCL
+
+cd $SYCL_HOME/llvm && time git checkout sycl && time git pull
+
+rm -rf $SYCL_HOME/build
+
+mkdir -p $SYCL_HOME/build
+
+# because I am using CentOS...
+export CC=$HOME/GCC/9.3.0/bin/gcc-9
+export CXX=$HOME/GCC/9.3.0/bin/g++-9 
+
+python ../llvm/buildbot/configure.py --cuda
+python ../llvm/buildbot/compile.py
+```
+
 ## hipSYCL
 
 See https://github.com/illuhad/hipSYCL/tree/master/doc for other options.
