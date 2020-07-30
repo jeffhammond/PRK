@@ -174,6 +174,65 @@ namespace prk
             }
         }
 
+        // This is copied from prk_util.h and only changes the allocation,
+        // which is pathetic and should be improved later.
+        template <typename T>
+        class vector {
+
+            private:
+                T * data_;
+                size_t size_;
+
+            public:
+
+                vector(size_t n) {
+                    this->data_ = prk::CUDA::alloc<T>(n,-1);
+                    this->size_ = n;
+                }
+
+                vector(size_t n, T v) {
+                    this->data_ = prk::CUDA::alloc<T>(n,-1);
+                    for (size_t i=0; i<n; ++i) this->data_[i] = v;
+                    this->size_ = n;
+                }
+
+                ~vector() {
+                    prk::CUDA::free<T>(this->data_,-1);
+                }
+
+                void operator~() {
+                    this->~vector();
+                }
+
+                T * data() {
+                    return this->data_;
+                }
+
+                size_t size() {
+                    return this->size_;
+                }
+
+                T const & operator[] (size_t n) const {
+                    return this->data_[n];
+                }
+
+                T & operator[] (size_t n) {
+                    return this->data_[n];
+                }
+
+                T * begin() {
+                    return &(this->data_[0]);
+                }
+
+                T * end() {
+                    return &(this->data_[this->size_]);
+                }
+
+                void fill(T v) {
+                    for (size_t i=0; i<this->size_; ++i) this->data_[i] = v;
+                }
+        };
+
         class queues {
 
             private:
@@ -269,11 +328,10 @@ namespace prk
                         auto source = &host_pointer[0];
                         std::cout << "BCAST: device " << i << std::endl;
                         prk::CUDA::check( cudaSetDevice(i) );
-                        prk::CUDA::check( cudaMemcpyAsync(target, source, bytes, cudaMemcpyDeviceToHost) );
+                        prk::CUDA::check( cudaMemcpyAsync(target, source, bytes, cudaMemcpyHostToDevice) );
                     }
                 }
 
-#if 0
                 template <typename T, typename B>
                 void reduce(B & host_pointer,
                             const std::vector<T*> & device_pointers,
@@ -282,20 +340,19 @@ namespace prk
                     std::cout << "REDUCE: num_elements " << num_elements << std::endl;
                     auto bytes = num_elements * sizeof(T);
                     std::cout << "REDUCE: bytes " << bytes << std::endl;
-                    auto temp = prk::vector<T>(num_elements, 0);
-                    for (const auto & l : list | boost::adaptors::indexed(0) ) {
-                        auto i = l.index();
-                        auto v = l.value();
+                    auto temp = prk::CUDA::vector<T>(num_elements, 0);
+                    int np = device_pointers.size();
+                    for (int i=0; i<np; ++i) {
                         std::cout << "REDUCE: device " << i << std::endl;
                         auto target = &temp[0];
                         auto source = device_pointers.at(i);
-                        v.memcpy(target, source, bytes);
+                        prk::CUDA::check( cudaSetDevice(i) );
+                        prk::CUDA::check( cudaMemcpy(target, source, bytes, cudaMemcpyDeviceToHost) );
                         for (size_t e=0; e<num_elements; ++e) {
                             host_pointer[e] += temp[e];
                         }
                     }
                 }
-#endif
 
                 template <typename T, typename B>
                 void gather(B & host_pointer,
@@ -369,65 +426,6 @@ namespace prk
 
                 }
 #endif
-        };
-
-        // This is copied from prk_util.h and only changes the allocation,
-        // which is pathetic and should be improved later.
-        template <typename T>
-        class vector {
-
-            private:
-                T * data_;
-                size_t size_;
-
-            public:
-
-                vector(size_t n) {
-                    this->data_ = prk::CUDA::alloc<T>(n,-1);
-                    this->size_ = n;
-                }
-
-                vector(size_t n, T v) {
-                    this->data_ = prk::CUDA::alloc<T>(n,-1);
-                    for (size_t i=0; i<n; ++i) this->data_[i] = v;
-                    this->size_ = n;
-                }
-
-                ~vector() {
-                    prk::CUDA::free<T>(this->data_,-1);
-                }
-
-                void operator~() {
-                    this->~vector();
-                }
-
-                T * data() {
-                    return this->data_;
-                }
-
-                size_t size() {
-                    return this->size_;
-                }
-
-                T const & operator[] (size_t n) const {
-                    return this->data_[n];
-                }
-
-                T & operator[] (size_t n) {
-                    return this->data_[n];
-                }
-
-                T * begin() {
-                    return &(this->data_[0]);
-                }
-
-                T * end() {
-                    return &(this->data_[this->size_]);
-                }
-
-                void fill(T v) {
-                    for (size_t i=0; i<this->size_; ++i) this->data_[i] = v;
-                }
         };
 
     } // CUDA namespace
