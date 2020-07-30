@@ -190,10 +190,11 @@ int main(int argc, char * argv[])
             std::cerr << "INFO: nstream args: " << local_length << "," << scalar << "," << d_A.at(i) << "," << d_B.at(i) << "," << d_C.at(i) << std::endl;
             nstream<<<dimGrid, dimBlock>>>(local_length, scalar, d_A.at(i), d_B.at(i), d_C.at(i));
             std::cerr << "INFO: nstream submitted" << std::endl;
-            qs.wait(i);
-            std::cerr << "INFO: nstream finished" << std::endl;
+            //qs.wait(i);
+            //std::cerr << "INFO: nstream finished" << std::endl;
         }
-        //qs.waitall();
+        std::cerr << "INFO: nstream finished" << std::endl;
+        qs.waitall();
       }
       nstream_time = prk::wtime() - nstream_time;
   }
@@ -236,8 +237,8 @@ int main(int argc, char * argv[])
       std::cout << "Solution validates" << std::endl;
       double avgtime = nstream_time/iterations;
       double nbytes = 4.0 * length * sizeof(double);
-      std::cout << "Rate (MB/s): " << 1.e-6*nbytes/avgtime
-                << " Avg time (s): " << avgtime << std::endl;
+      std::cout << "Rate (MB/s): " << std::fixed << 1.e-6*nbytes/avgtime
+                << " Avg time (s): " << std::scientific << avgtime << std::endl;
   }
 
   return 0;
