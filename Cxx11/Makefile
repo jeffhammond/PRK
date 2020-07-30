@@ -5,6 +5,9 @@ CPPFLAGS  = -DPRKVERSION=$(PRKVERSION)
 
 CXXFLAGS  = $(DEFAULT_OPT_FLAGS) $(CPPFLAGS)
 
+# async
+CXXFLAGS += -pthread
+
 # debugging
 ifdef VERBOSE
     CXXFLAGS += -DVERBOSE
