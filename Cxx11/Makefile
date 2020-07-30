@@ -125,6 +125,9 @@ raja: p2p-raja stencil-raja nstream-raja \
 
 cuda: nstream-cuda nstream-managed-cuda nstream-multigpu-cuda stencil-cuda transpose-cuda
 
+test_cuda_collectives: test_cuda_collectives.cu prk_util.h prk_cuda.h
+	$(NVCC) $(CUDAFLAGS) -g $< -o $@
+
 cublas: nstream-cublas transpose-cublas dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas
 
 thrust: nstream-host-thrust nstream-device-thrust \
@@ -282,7 +285,7 @@ clean:
 	-rm -f *-sycl-explicit-usm
 	-rm -f *-dpct
 	-rm -f *-dpcpp
-	-rm -f test_dpcpp_collectives
+	-rm -f test_*_collectives
 	-rm -f *-celerity
 	-rm -f *-tbb
 	-rm -f *-stl
