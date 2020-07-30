@@ -149,7 +149,7 @@ int main(int argc, char * argv[])
     size_t errors(0);
     for (int d=0; d<np; ++d) {
         for (size_t i=0; i<local_length; ++i) {
-            size_t offset = d * local_length + i;
+            //size_t offset = d * local_length + i;
             if (host[i] != i) {
                 std::cerr << "ERROR for device " << d << " at location " << i << " : " << host[i] << "\n";
                 errors++;
@@ -168,6 +168,8 @@ int main(int argc, char * argv[])
 
   qs.broadcast<double>(device, host2, local_length);
   qs.waitall();
+
+  host2.fill(0);
 
   qs.reduce<double>(host2, device, local_length);
   qs.waitall();
