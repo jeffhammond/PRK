@@ -161,9 +161,9 @@ int main(int argc, char * argv[])
   auto h_B = prk::CUDA::vector<double>(length, 2);
   auto h_C = prk::CUDA::vector<double>(length, 2);
 
-  auto d_A = std::vector<double*> (np, nullptr);
-  auto d_B = std::vector<double*> (np, nullptr);
-  auto d_C = std::vector<double*> (np, nullptr);
+  auto d_A = std::vector<double*>(np, nullptr);
+  auto d_B = std::vector<double*>(np, nullptr);
+  auto d_C = std::vector<double*>(np, nullptr);
 
   qs.allocate<double>(d_A, local_length);
   qs.allocate<double>(d_B, local_length);
@@ -185,6 +185,8 @@ int main(int argc, char * argv[])
         if (iter==1) nstream_time = prk::wtime();
 
         for (int i=0; i<np; ++i) {
+            std::cerr << "INFO: device: " << i << std::endl;
+            prk::CUDA::check( cudaSetDevice(i) );
             std::cerr << "INFO: nstream args: " << local_length << "," << scalar << "," << d_A.at(i) << "," << d_B.at(i) << "," << d_C.at(i) << std::endl;
             nstream<<<dimGrid, dimBlock>>>(local_length, scalar, d_A.at(i), d_B.at(i), d_C.at(i));
             std::cerr << "INFO: nstream submitted" << std::endl;
