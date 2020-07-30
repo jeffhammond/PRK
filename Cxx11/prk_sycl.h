@@ -210,6 +210,7 @@ namespace prk {
                         auto target = &temp[0];
                         auto source = device_pointers[i];
                         v.memcpy(target, source, bytes);
+                        wait(i);
                         for (size_t e=0; e<num_elements; ++e) {
                             host_pointer[e] += temp[e];
                         }
