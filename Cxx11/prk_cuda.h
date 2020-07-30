@@ -153,6 +153,7 @@ namespace prk
         T * alloc(size_t n, int device = 0) {
             size_t bytes = n * sizeof(T);
             T * ptr = nullptr;
+            std::cerr << "INFO: alloc - device: " << device << std::endl;
             if (device < 0) {
                 prk::CUDA::check( cudaMallocHost((void**)&ptr, bytes) );
             } else {
@@ -164,6 +165,7 @@ namespace prk
 
         template<typename T>
         void free(T * ptr, int device = 0) {
+            std::cerr << "INFO: free - device: " << device << std::endl;
             if (device < 0) {
                 prk::CUDA::check( cudaFreeHost(ptr) );
             } else {
@@ -175,22 +177,46 @@ namespace prk
         class queues {
 
             private:
-                int np;
+                int np_;
 
             public:
                 queues(void)
                 {
-                    prk::CUDA::check( cudaGetDeviceCount(&np) );
+                    prk::CUDA::check( cudaGetDeviceCount(&np_) );
+                    std::cerr << "INFO: device count: " << np_ << std::endl;
+                }
+
+                queues(int n)
+                {
+                    int d;
+                    prk::CUDA::check( cudaGetDeviceCount(&d) );
+                    if (n > d) {
+                        std::cerr << "ERROR: requesting more devices (" << n << ") than available (" << d << ")" << std::endl;
+                        std::abort();
+                    }
+                    std::cerr << "INFO: device count: " << np_ << std::endl;
+                }
+
+                void resize(int n)
+                {
+                    int d;
+                    prk::CUDA::check( cudaGetDeviceCount(&d) );
+                    if (n > d) {
+                        std::cerr << "ERROR: requesting more devices (" << n << ") than available (" << d << ")" << std::endl;
+                        std::abort();
+                    }
+                    np_ = n;
+                    std::cerr << "INFO: device count: " << np_ << std::endl;
                 }
 
                 int size(void)
                 {
-                    return np;
+                    return np_;
                 }
 
                 void wait(int i)
                 {
-                    if (i > np) {
+                    if (i > np_) {
                         std::cerr << "ERROR: invalid device id: " << i << std::endl;
                         std::abort();
                     }
@@ -200,7 +226,7 @@ namespace prk
 
                 void waitall(void)
                 {
-                    for (int i=0; i<np; ++i) {
+                    for (int i=0; i<np_; ++i) {
                         prk::CUDA::check( cudaSetDevice(i) );
                         prk::CUDA::check( cudaDeviceSynchronize() );
                     }
@@ -210,24 +236,24 @@ namespace prk
                 void allocate(std::vector<T*> & device_pointers,
                               size_t num_elements)
                 {
-                    if (device_pointers.size() != np) {
-                        std::cerr << "ERROR: invalid device count: " << device_pointers.size() << std::endl;
-                        std::abort();
-                    }
+                    std::cerr << "INFO: device count: " << np_ << std::endl;
+                    std::cerr << "INFO: device_pointers.size(): " << device_pointers.size() << std::endl;
+                    int np = device_pointers.size();
                     for (int i=0; i<np; ++i) {
-                        device_pointers[i] = prk::CUDA::alloc<T>(num_elements, i);
+                        device_pointers.at(i) = prk::CUDA::alloc<T>(num_elements, i);
+                        std::cerr << "INFO: allocate - device, address: " << i << ", " << device_pointers.at(i) << std::endl;
                     }
                 }
 
                 template <typename T>
                 void free(std::vector<T*> & device_pointers)
                 {
-                    if (device_pointers.size() != np) {
-                        std::cerr << "ERROR: invalid device count: " << device_pointers.size() << std::endl;
-                        std::abort();
-                    }
+                    std::cerr << "INFO: device count: " << np_ << std::endl;
+                    std::cerr << "INFO: device_pointers.size(): " << device_pointers.size() << std::endl;
+                    int np = device_pointers.size();
                     for (int i=0; i<np; ++i) {
-                        prk::CUDA::free(device_pointers[i], i);
+                        std::cerr << "INFO: free - device, address: " << i << ", " << device_pointers.at(i) << std::endl;
+                        prk::CUDA::free(device_pointers.at(i), i);
                     }
                 }
 
@@ -237,12 +263,9 @@ namespace prk
                                size_t num_elements)
                 {
                     auto bytes = num_elements * sizeof(T);
-                    if (device_pointers.size() != np) {
-                        std::cerr << "ERROR: invalid device count: " << device_pointers.size() << std::endl;
-                        std::abort();
-                    }
+                    int np = device_pointers.size();
                     for (int i=0; i<np; ++i) {
-                        auto target = device_pointers[i];
+                        auto target = device_pointers.at(i);
                         auto source = &host_pointer[0];
                         std::cout << "BCAST: device " << i << std::endl;
                         prk::CUDA::check( cudaSetDevice(i) );
@@ -265,7 +288,7 @@ namespace prk
                         auto v = l.value();
                         std::cout << "REDUCE: device " << i << std::endl;
                         auto target = &temp[0];
-                        auto source = device_pointers[i];
+                        auto source = device_pointers.at(i);
                         v.memcpy(target, source, bytes);
                         for (size_t e=0; e<num_elements; ++e) {
                             host_pointer[e] += temp[e];
@@ -280,13 +303,10 @@ namespace prk
                             size_t num_elements)
                 {
                     auto bytes = num_elements * sizeof(T);
-                    if (device_pointers.size() != np) {
-                        std::cerr << "ERROR: invalid device count: " << device_pointers.size() << std::endl;
-                        std::abort();
-                    }
+                    int np = device_pointers.size();
                     for (int i=0; i<np; ++i) {
                         auto target = &host_pointer[i * num_elements];
-                        auto source = device_pointers[i];
+                        auto source = device_pointers.at(i);
                         prk::CUDA::check( cudaSetDevice(i) );
                         prk::CUDA::check( cudaMemcpyAsync(target, source, bytes, cudaMemcpyDeviceToHost) );
                     }
@@ -298,12 +318,9 @@ namespace prk
                              size_t num_elements)
                 {
                     auto bytes = num_elements * sizeof(T);
-                    if (device_pointers.size() != np) {
-                        std::cerr << "ERROR: invalid device count: " << device_pointers.size() << std::endl;
-                        std::abort();
-                    }
+                    int np = device_pointers.size();
                     for (int i=0; i<np; ++i) {
-                        auto target = device_pointers[i];
+                        auto target = device_pointers.at(i);
                         auto source = &host_pointer[i * num_elements];
                         prk::CUDA::check( cudaSetDevice(i) );
                         prk::CUDA::check( cudaMemcpyAsync(target, source, bytes, cudaMemcpyHostToDevice) );
@@ -319,12 +336,17 @@ namespace prk
                               std::vector<T*> & device_pointers_in,
                               size_t num_elements)
                 {
+                    if ( device_pointers_out.size() != device_pointers_in.size() ) {
+                        std::cerr << "ERROR: device pointer vectors do not match: "
+                                  << device_pointers_out.size() << "!=" << device_pointers_in.size() << std::endl;
+                        std::abort();
+                    }
                     auto bytes = num_elements * sizeof(T);
                     // allocate np*np temp space on the host, because
                     // we cannot copy device-to-device if they are in
                     // different contexts.
                     // we can specialize for single-context later...
-                    int np = this->list.size();
+                    int np = device_pointers.size();
                     prk::vector<double> temp(num_elements * np * np);
 
                     // gather phase - contiguous
@@ -332,7 +354,7 @@ namespace prk
                         auto i = l.index();
                         auto v = l.value();
                         auto target = &temp[i * np * num_elements];
-                        auto source = device_pointers_in[i];
+                        auto source = device_pointers_in.at(i);
                         v.memcpy(target, source, np * bytes);
                     }
 
@@ -340,13 +362,72 @@ namespace prk
                     for (const auto & l : list | boost::adaptors::indexed(0) ) {
                         auto i = l.index();
                         auto v = l.value();
-                        auto target = device_pointers_out[i];
+                        auto target = device_pointers_out.at(i);
                         auto source = &temp[i * num_elements];
                         v.memcpy(target, source, bytes);
                     }
 
                 }
 #endif
+        };
+
+        // This is copied from prk_util.h and only changes the allocation,
+        // which is pathetic and should be improved later.
+        template <typename T>
+        class vector {
+
+            private:
+                T * data_;
+                size_t size_;
+
+            public:
+
+                vector(size_t n) {
+                    this->data_ = prk::CUDA::alloc<T>(n,-1);
+                    this->size_ = n;
+                }
+
+                vector(size_t n, T v) {
+                    this->data_ = prk::CUDA::alloc<T>(n,-1);
+                    for (size_t i=0; i<n; ++i) this->data_[i] = v;
+                    this->size_ = n;
+                }
+
+                ~vector() {
+                    prk::CUDA::free<T>(this->data_,-1);
+                }
+
+                void operator~() {
+                    this->~vector();
+                }
+
+                T * data() {
+                    return this->data_;
+                }
+
+                size_t size() {
+                    return this->size_;
+                }
+
+                T const & operator[] (size_t n) const {
+                    return this->data_[n];
+                }
+
+                T & operator[] (size_t n) {
+                    return this->data_[n];
+                }
+
+                T * begin() {
+                    return &(this->data_[0]);
+                }
+
+                T * end() {
+                    return &(this->data_[this->size_]);
+                }
+
+                void fill(T v) {
+                    for (size_t i=0; i<this->size_; ++i) this->data_[i] = v;
+                }
         };
 
     } // CUDA namespace

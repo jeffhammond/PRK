@@ -88,12 +88,14 @@ int main(int argc, char * argv[])
   prk::CUDA::info info;
   info.print();
 
+  auto qs = prk::CUDA::queues();
+
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
   int iterations;
-  unsigned int length;
+  int length, local_length;
   int use_ngpu = 1;
   try {
       if (argc < 3) {
@@ -105,33 +107,43 @@ int main(int argc, char * argv[])
         throw "ERROR: iterations must be >= 1";
       }
 
-      long ll = std::atol(argv[2]);
-      if (ll >= UINT_MAX || ll < 0) {
-        throw "ERROR: vector length must be less than UINT_MAX (and nonnegative)";
+      length = std::atoi(argv[2]);
+      if (length <= 0) {
+        throw "ERROR: vector length must be positive";
       }
-      length = static_cast<unsigned int>(ll);
 
-      if (argc>3) {
+      if (argc > 3) {
         use_ngpu = std::atoi(argv[3]);
       }
+      if ( use_ngpu > qs.size() ) {
+          std::string error = "You cannot use more devices ("
+                            + std::to_string(use_ngpu)
+                            + ") than you have ("
+                            + std::to_string(qs.size()) + ")";
+          throw error;
+      }
+
+      if (length % use_ngpu != 0) {
+          std::string error = "ERROR: vector length ("
+                            + std::to_string(length)
+                            + ") should be divisible by # procs ("
+                            + std::to_string(use_ngpu) + ")";
+          throw error;
+      }
+      local_length = length / use_ngpu;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
     return 1;
   }
 
-  std::cout << "Number of iterations = " << iterations << std::endl;
-  std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Number of GPUs to use = " << use_ngpu << std::endl;
+  std::cout << "Number of devices     = " << use_ngpu << std::endl;
+  std::cout << "Number of iterations  = " << iterations << std::endl;
+  std::cout << "Vector length         = " << length << std::endl;
+  std::cout << "Vector length (local) = " << local_length << std::endl;
 
-  int haz_ngpu = info.num_gpus();
-  std::cout << "Number of GPUs found  = " << haz_ngpu << std::endl;
-
-  if (use_ngpu > haz_ngpu) {
-      std::cout << "You cannot use more GPUs (" << use_ngpu << ") than you have (" << haz_ngpu << ")" << std::endl;
-  }
-
-  int ngpus = use_ngpu;
+  int np = use_ngpu;
+  qs.resize(np);
 
   const int blockSize = 256;
   dim3 dimBlock(blockSize, 1, 1);
@@ -145,65 +157,52 @@ int main(int argc, char * argv[])
 
   double nstream_time(0);
 
-  const size_t bytes = length * sizeof(double);
+  auto h_A = prk::CUDA::vector<double>(length, 0);
+  auto h_B = prk::CUDA::vector<double>(length, 2);
+  auto h_C = prk::CUDA::vector<double>(length, 2);
 
-  double * h_A(nullptr);
-  prk::CUDA::check( cudaMallocHost((void**)&h_A, bytes) );
+  auto d_A = std::vector<double*> (np, nullptr);
+  auto d_B = std::vector<double*> (np, nullptr);
+  auto d_C = std::vector<double*> (np, nullptr);
 
-  // device buffers
-  std::vector<double*> d_A(ngpus,nullptr);
-  std::vector<double*> d_B(ngpus,nullptr);
-  std::vector<double*> d_C(ngpus,nullptr);
-  for (int i=0; i<ngpus; ++i) {
-      prk::CUDA::check( cudaSetDevice(i) );
-      prk::CUDA::check( cudaMalloc((void**)&d_A, bytes) );
-      prk::CUDA::check( cudaMalloc((void**)&d_B, bytes) );
-      prk::CUDA::check( cudaMalloc((void**)&d_C, bytes) );
-      init<<<dimGrid, dimBlock>>>(length, d_A[i], 0);
-      init<<<dimGrid, dimBlock>>>(length, d_B[i], 2);
-      init<<<dimGrid, dimBlock>>>(length, d_C[i], 2);
+  qs.allocate<double>(d_A, local_length);
+  qs.allocate<double>(d_B, local_length);
+  qs.allocate<double>(d_C, local_length);
+  qs.waitall();
+
+  qs.scatter<double>(d_A, h_A, local_length);
+  qs.scatter<double>(d_B, h_B, local_length);
+  qs.scatter<double>(d_C, h_C, local_length);
+  qs.waitall();
+
+  // overwrite host buffer with garbage to detect bugs
+  h_A.fill(-77777777);
+
+  const double scalar(3);
+  {
+      for (int iter = 0; iter<=iterations; iter++) {
+
+        if (iter==1) nstream_time = prk::wtime();
+
+        for (int i=0; i<np; ++i) {
+            std::cerr << "INFO: nstream args: " << local_length << "," << scalar << "," << d_A.at(i) << "," << d_B.at(i) << "," << d_C.at(i) << std::endl;
+            nstream<<<dimGrid, dimBlock>>>(local_length, scalar, d_A.at(i), d_B.at(i), d_C.at(i));
+            std::cerr << "INFO: nstream submitted" << std::endl;
+            qs.wait(i);
+            std::cerr << "INFO: nstream finished" << std::endl;
+        }
+        //qs.waitall();
+      }
+      nstream_time = prk::wtime() - nstream_time;
   }
 
-  for (int i=0; i<ngpus; ++i) {
-      prk::CUDA::check( cudaSetDevice(i) );
-      prk::CUDA::check( cudaDeviceSynchronize() );
-      prk::CUDA::check( cudaMemcpy(d_A, &(h_A[0]), bytes, cudaMemcpyHostToDevice) );
-      prk::CUDA::check( cudaMemcpy(d_B, &(h_B[0]), bytes, cudaMemcpyHostToDevice) );
-      prk::CUDA::check( cudaMemcpy(d_C, &(h_C[0]), bytes, cudaMemcpyHostToDevice) );
-  }
+  qs.gather<double>(h_A, d_A, local_length);
+  qs.waitall();
 
-  double scalar(3);
-  for (int iter = 0; iter<=iterations; iter++) {
-
-    if (iter==1) nstream_time = prk::wtime();
-
-    for (int i=0; i<ngpus; ++i) {
-        prk::CUDA::check( cudaSetDevice(i) );
-        nstream<<<dimGrid, dimBlock>>>(static_cast<unsigned>(length), scalar, d_A, d_B, d_C);
-    }
-    for (int i=0; i<ngpus; ++i) {
-        prk::CUDA::check( cudaDeviceSynchronize() );
-    }
-  }
-  nstream_time = prk::wtime() - nstream_time;
-
-  // copy output back to host
-  for (int i=0; i<ngpus; ++i) {
-      prk::CUDA::check( cudaSetDevice(i) );
-      prk::CUDA::check( cudaMemcpyAsync(&(h_A[0]), d_A, bytes, cudaMemcpyDeviceToHost) );
-  }
-
-  for (int i=0; i<ngpus; ++i) {
-      prk::CUDA::check( cudaSetDevice(i) );
-      prk::CUDA::check( cudaDeviceSynchronize() );
-      prk::CUDA::check( cudaFree(d_C[i]) );
-      prk::CUDA::check( cudaFree(d_B[i]) );
-      prk::CUDA::check( cudaFree(d_A[i]) );
-  }
-
-  prk::CUDA::check( cudaFreeHost(h_A) );
-  prk::CUDA::check( cudaFreeHost(h_B) );
-  prk::CUDA::check( cudaFreeHost(h_C) );
+  qs.free(d_A);
+  qs.free(d_B);
+  qs.free(d_C);
+  qs.waitall();
 
   //////////////////////////////////////////////////////////////////////
   /// Analyze and output results
@@ -222,8 +221,6 @@ int main(int argc, char * argv[])
   for (int i=0; i<length; i++) {
       asum += prk::abs(h_A[i]);
   }
-
-  prk::CUDA::check( cudaFreeHost(h_A) );
 
   double epsilon=1.e-8;
   if (prk::abs(ar-asum)/asum > epsilon) {
