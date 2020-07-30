@@ -174,6 +174,8 @@ Cxx11/dgemm-raja
 Cxx11/dgemm-vector-raja
 Cxx11/dgemm-cblas
 Cxx11/dgemm-cublas
+Cxx11/dgemm-mpi-cublas
+Cxx11/dgemm-multigpu-cublas
 Cxx11/p2p-openmp-target
 Cxx11/p2p-tasks-openmp
 Cxx11/p2p-tasks-tbb
@@ -194,6 +196,7 @@ Cxx11/p2p-hyperplane-stl
 Cxx11/p2p-hyperplane-pstl
 Cxx11/p2p-hyperplane-tbb
 Cxx11/p2p-hyperplane-sycl
+Cxx11/nstream
 Cxx11/nstream-kokkos
 Cxx11/nstream-opencl
 Cxx11/nstream-valarray
@@ -212,7 +215,9 @@ Cxx11/nstream-valarray-boost-compute
 Cxx11/nstream-boost-compute
 Cxx11/nstream-cublas
 Cxx11/nstream-cuda
+Cxx11/nstream-managed-cuda
 Cxx11/nstream-cuda-managed
+Cxx11/nstream-multigpu-cuda
 Cxx11/nstream-openmp-target
 Cxx11/nstream-sycl
 Cxx11/nstream-sycl-usm
