@@ -84,6 +84,8 @@ vector: p2p-vector p2p-hyperplane-vector stencil-vector transpose-vector nstream
 
 valarray: transpose-valarray nstream-valarray
 
+cblas: transpose-cblas dgemm-cblas
+
 openmp: p2p-hyperplane-openmp p2p-tasks-openmp stencil-openmp transpose-openmp nstream-openmp
 
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
@@ -121,16 +123,12 @@ kokkos: stencil-kokkos transpose-kokkos nstream-kokkos
 raja: p2p-raja stencil-raja nstream-raja \
       p2p-raja transpose-raja nstream-raja stencil-raja # transpose-raja
 
-cuda: stencil-cuda transpose-cuda nstream-cuda nstream-managed-cuda
+cuda: nstream-cuda nstream-managed-cuda nstream-multigpu-cuda stencil-cuda transpose-cuda
+
+cublas: nstream-cublas transpose-cublas dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas
 
 thrust: nstream-host-thrust nstream-device-thrust \
         transpose-host-thrust transpose-device-thrust
-
-cuda: transpose-cuda
-
-cublas: transpose-cublas nstream-cublas dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas
-
-cblas: transpose-cblas dgemm-cblas
 
 onemkl: nstream-onemkl dgemm-onemkl dgemm-multigpu-onemkl
 
