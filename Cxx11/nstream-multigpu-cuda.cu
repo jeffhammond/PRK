@@ -185,15 +185,15 @@ int main(int argc, char * argv[])
         if (iter==1) nstream_time = prk::wtime();
 
         for (int i=0; i<np; ++i) {
-            std::cerr << "INFO: device: " << i << std::endl;
+            //std::cerr << "INFO: device: " << i << std::endl;
             prk::CUDA::check( cudaSetDevice(i) );
-            std::cerr << "INFO: nstream args: " << local_length << "," << scalar << "," << d_A.at(i) << "," << d_B.at(i) << "," << d_C.at(i) << std::endl;
+            //std::cerr << "INFO: nstream args: " << local_length << "," << scalar << "," << d_A.at(i) << "," << d_B.at(i) << "," << d_C.at(i) << std::endl;
             nstream<<<dimGrid, dimBlock>>>(local_length, scalar, d_A.at(i), d_B.at(i), d_C.at(i));
-            std::cerr << "INFO: nstream submitted" << std::endl;
+            //std::cerr << "INFO: nstream submitted" << std::endl;
             //qs.wait(i);
             //std::cerr << "INFO: nstream finished" << std::endl;
         }
-        std::cerr << "INFO: nstream finished" << std::endl;
+        //std::cerr << "INFO: nstream finished" << std::endl;
         qs.waitall();
       }
       nstream_time = prk::wtime() - nstream_time;
