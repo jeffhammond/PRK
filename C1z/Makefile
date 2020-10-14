@@ -54,7 +54,8 @@ serial: nstream \
         p2p p2p-2d p2p-tasks-2d \
 	p2p-hyperplane p2p-hyperplane-2d \
 	stencil stencil-2d \
-	transpose transpose-2d
+	transpose transpose-2d \
+	dgemm dgemm-2d
 
 vector: p2p-sse p2p-avx p2p-avx-tasks-openmp
 
@@ -93,6 +94,9 @@ stencil: stencil-openmp.c prk_util.h
 	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
 
 transpose: transpose-openmp.c prk_util.h
+	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
+
+dgemm: dgemm-openmp.c prk_util.h
 	$(CC) $(CFLAGS) $< $(EXTRA_CLIBS) -o $@
 
 p2p-2d: p2p-2d.c prk_util.h
