@@ -51,22 +51,10 @@
 !
 ! *******************************************************************
 
-function prk_get_wtime() result(t)
-  use iso_fortran_env
-  implicit none
-  real(kind=REAL64) ::  t
-  integer(kind=INT64) :: c, r
-  call system_clock(count = c, count_rate = r)
-  t = real(c,REAL64) / real(r,REAL64)
-end function prk_get_wtime
-
 program main
   use iso_fortran_env
-#ifdef _OPENMP
   use omp_lib
-#endif
   implicit none
-  real(kind=REAL64) :: prk_get_wtime
   ! for argument parsing
   integer :: err
   integer :: arglen
@@ -91,11 +79,11 @@ program main
   ! ********************************************************************
 
   write(*,'(a25)') 'Parallel Research Kernels'
-  write(*,'(a61)') 'Fortran BLAS Dense matrix-matrix multiplication: C += A x B'
+  write(*,'(a61)') 'Fortran OpenMP TARGET BLAS Dense matrix-matrix multiplication: C += A x B'
 
   if (command_argument_count().lt.2) then
     write(*,'(a17,i1)') 'argument count = ', command_argument_count()
-    write(*,'(a66)')    'Usage: ./dgemm-blas <# iterations> <matrix order>'
+    write(*,'(a62)')    'Usage: ./dgemm-blas-target <# iterations> <matrix order>'
     stop 1
   endif
 
@@ -115,9 +103,7 @@ program main
     stop 1
   endif
 
-#ifdef _OPENMP
   write(*,'(a,i8)') 'Number of threads    = ', omp_get_max_threads()
-#endif
   write(*,'(a,i8)') 'Number of iterations = ', iterations
   write(*,'(a,i8)') 'Matrix order         = ', order
 
@@ -143,29 +129,35 @@ program main
     stop 1
   endif
 
+  !$omp parallel do
   do i=1, order
     A(:,i) = real(i-1,REAL64)
     B(:,i) = real(i-1,REAL64)
     C(:,i) = real(0,REAL64)
   enddo
+  !$omp end parallel do
+
+  !$omp target data map(to: A,B) map(tofrom: C) map(to:order, alpha, beta)
 
   t0 = 0
 
   alpha = 1.0d0
   beta  = 1.0d0
   do k=0,iterations
-    if (k.eq.1) t0 = prk_get_wtime()
+    if (k.eq.1) t0 = omp_get_wtime()
+    !$omp target variant dispatch
     call dgemm('N', 'N',              &
                order, order, order,   &
                alpha, A, order,       &
                       B, order,       &
                beta,  C, order)
+    !$omp end target variant dispatch
   enddo
 
-  t1 = prk_get_wtime()
-
-
+  t1 = omp_get_wtime()
   dgemm_time = t1 - t0
+
+  !$omp end target data
 
   ! ********************************************************************
   ! ** Analyze and output results.
@@ -177,11 +169,13 @@ program main
   forder = real(order,REAL64)
   reference = 0.25d0 * forder**3 * (forder-1)**2 * (iterations+1)
   checksum = 0.0d0
+  !$omp parallel do simd reduction(+:checksum)
   do j=1,order
     do i=1,order
       checksum = checksum + C(i,j)
     enddo
   enddo
+  !$omp end parallel do simd
 
   deallocate( C )
 

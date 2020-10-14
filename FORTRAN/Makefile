@@ -66,7 +66,8 @@ coarray: p2p-coarray stencil-coarray transpose-coarray
 
 ga: nstream-ga transpose-ga dgemm-ga
 
-target: stencil-openmp-target transpose-openmp-target nstream-openmp-target dgemm-openmp-target
+target: stencil-openmp-target transpose-openmp-target nstream-openmp-target \
+	dgemm-openmp-target dgemm-blas-target
 
 ornlacc: p2p-ornlacc p2p-innerloop-ornlacc stencil-ornlacc transpose-ornlacc nstream-ornlacc
 
@@ -102,6 +103,9 @@ dgemm-blas: dgemm-blas.F90
 
 %-target: %-target.F90
 	$(FC) $(FCFLAGS) $(OPENMPFLAG) $(OFFLOADFLAG) $< -o $@
+
+dgemm-blas-target: dgemm-blas-target.F90
+	$(FC) $(FCFLAGS) $(OPENMPFLAG) $(OFFLOADFLAG) $(BLASFLAGS) $< -o $@
 
 %-ornlacc: %-ornlacc.F90
 	$(FC) $(FCFLAGS) $(ORNLACCFLAG) $< -o $@
