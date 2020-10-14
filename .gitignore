@@ -147,8 +147,11 @@ C1z/transpose-2d-openmp
 C1z/transpose-target
 C1z/transpose-taskloop
 C1z/transpose-ispc
+C1z/dgemm
+C1z/dgemm-2d
 C1z/dgemm-openmp
 C1z/dgemm-2d-openmp
+C1z/dgemm-target
 # directories for dependencies
 Cxx11/boost
 Cxx11/boostall
