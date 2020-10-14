@@ -64,7 +64,8 @@ openmp: nstream-openmp p2p-simd-openmp \
 	p2p-tasks-openmp p2p-tasks-2d-openmp \
 	p2p-hyperplane-openmp p2p-hyperplane-2d-openmp \
 	stencil-openmp stencil-2d-openmp \
-	transpose-openmp transpose-2d-openmp
+	transpose-openmp transpose-2d-openmp \
+	dgemm-openmp dgemm-2d-openmp
 
 mpi: nstream-mpi
 
