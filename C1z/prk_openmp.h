@@ -82,4 +82,8 @@
 # define OMP_TARGET(x)
 #endif
 
+#if defined(_OPENMP) && (_OPENMP > 201511)
+#pragma omp requires unified_address
+#endif
+
 #endif /* PRK_OPENMP_H */

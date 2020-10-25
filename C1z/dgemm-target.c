@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2013, Intel Corporation
+/// Copyright (c) 2020, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -31,35 +31,82 @@
 
 //////////////////////////////////////////////////////////////////////
 ///
-/// NAME:    transpose
+/// NAME:    dgemm
 ///
-/// PURPOSE: This program measures the time for the transpose of a
-///          column-major stored matrix into a row-major stored matrix.
+/// PURPOSE: This program tests the efficiency with which a dense matrix
+///          dense multiplication is carried out
 ///
-/// USAGE:   Program input is the matrix order and the number of times to
-///          repeat the operation:
+/// USAGE:   The program takes as input the matrix order,
+///          the number of times the matrix-matrix multiplication
+///          is carried out, and, optionally, a tile size for matrix
+///          blocking
 ///
-///          transpose <matrix_size> <# iterations> [tile size]
-///
-///          An optional parameter specifies the tile size used to divide the
-///          individual matrix blocks for improved cache and TLB performance.
+///          <progname> <# iterations> <matrix order> [<tile size>]
 ///
 ///          The output consists of diagnostics to make sure the
-///          transpose worked and timing statistics.
+///          algorithm worked, and of timing statistics.
 ///
-/// HISTORY: Written by  Rob Van der Wijngaart, February 2009.
-///          Converted to C++11 by Jeff Hammond, February 2016 and May 2017.
-///          C11-ification by Jeff Hammond, June 2017.
+/// FUNCTIONS CALLED:
+///
+///          Other than OpenMP or standard C functions, the following
+///          functions are used in this program:
+///
+///          wtime()
+///
+/// HISTORY: Written by Rob Van der Wijngaart, February 2009.
+///          Converted to C++11 by Jeff Hammond, December, 2017.
+///          Converted to C11   by Jeff Hammond, October, 2020.
 ///
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
 #include "prk_openmp.h"
 
+void prk_dgemm(const int order,
+               const double * A,
+               const double * B,
+                     double * C)
+{
+    OMP_TARGET( teams distribute parallel for simd )
+    for (int i=0; i<order; ++i) {
+      for (int k=0; k<order; ++k) {
+        for (int j=0; j<order; ++j) {
+            C[i*order+j] += A[i*order+k] * B[k*order+j];
+        }
+      }
+    }
+}
+
+void prk_dgemm_tiled(const int order, const int tile_size,
+                     const double * A,
+                     const double * B,
+                           double * C)
+{
+    OMP_TARGET( teams distribute collapse(3) )
+    for (int it=0; it<order; it+=tile_size) {
+      for (int kt=0; kt<order; kt+=tile_size) {
+        for (int jt=0; jt<order; jt+=tile_size) {
+          // ICC will not hoist these on its own...
+          int iend = MIN(order,it+tile_size);
+          int jend = MIN(order,jt+tile_size);
+          int kend = MIN(order,kt+tile_size);
+          OMP( parallel for simd )
+          for (int i=it; i<iend; ++i) {
+            for (int k=kt; k<kend; ++k) {
+              for (int j=jt; j<jend; ++j) {
+                C[i*order+j] += A[i*order+k] * B[k*order+j];
+              }
+            }
+          }
+        }
+      }
+    }
+}
+
 int main(int argc, char * argv[])
 {
   printf("Parallel Research Kernels version %d\n", PRKVERSION );
-  printf("C11/OpenMP TARGET Matrix transpose: B = A^T\n");
+  printf("C11/OpenMP TARGET Dense matrix-matrix multiplication: C += A x B\n");
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
@@ -70,14 +117,12 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  // number of times to do the transpose
   int iterations = atoi(argv[1]);
   if (iterations < 1) {
     printf("ERROR: iterations must be >= 1\n");
     return 1;
   }
 
-  // order of a the matrix
   int order = atoi(argv[2]);
   if (order <= 0) {
     printf("ERROR: Matrix Order must be greater than 0\n");
@@ -89,79 +134,56 @@ int main(int argc, char * argv[])
   // a negative tile size means no tiling of the local transpose
   if (tile_size <= 0) tile_size = order;
 
+  printf("Number of threads (max)   = %d\n", omp_get_max_threads());
   printf("Number of iterations  = %d\n", iterations);
   printf("Matrix order          = %d\n", order);
   printf("Tile size             = %d\n", tile_size);
 
   //////////////////////////////////////////////////////////////////////
-  /// Allocate space for the input and transpose matrix
+  /// Allocate space for matrices
   //////////////////////////////////////////////////////////////////////
 
-  double trans_time = 0.0;
+  double dgemm_time = 0.0;
 
   size_t bytes = order*order*sizeof(double);
   double * restrict A = prk_malloc(bytes);
   double * restrict B = prk_malloc(bytes);
+  double * restrict C = prk_malloc(bytes);
 
-  // HOST
-  OMP_PARALLEL()
-  {
-    OMP_FOR()
-    for (int i=0;i<order; i++) {
-      OMP_SIMD
-      for (int j=0;j<order;j++) {
-        A[i*order+j] = (double)(i*order+j);
-        B[i*order+j] = 0.0;
-      }
+  for (int i=0;i<order; i++) {
+    for (int j=0;j<order;j++) {
+      A[i*order+j] = (double)j;
+      B[i*order+j] = (double)j;
+      C[i*order+j] = 0.0;
     }
   }
 
-  // DEVICE
-  OMP_TARGET( data map(tofrom: A[0:order*order], B[0:order*order]) )
+  OMP_TARGET( data map(to: A[0:order*order], B[0:order*order]) map(tofrom: C[0:order*order]) )
   {
     for (int iter = 0; iter<=iterations; iter++) {
 
-      if (iter==1) trans_time = omp_get_wtime();
+      if (iter==1) dgemm_time = omp_get_wtime();
 
-      // transpose the  matrix
       if (tile_size < order) {
-        OMP_TARGET( teams distribute parallel for simd collapse(2) )
-        for (int it=0; it<order; it+=tile_size) {
-          for (int jt=0; jt<order; jt+=tile_size) {
-            for (int i=it; i<MIN(order,it+tile_size); i++) {
-              for (int j=jt; j<MIN(order,jt+tile_size); j++) {
-                B[i*order+j] += A[j*order+i];
-                A[j*order+i] += 1.0;
-              }
-            }
-          }
-        }
+          prk_dgemm_tiled(order, tile_size, A, B, C);
       } else {
-        OMP_TARGET( teams distribute parallel for simd collapse(2) schedule(static,1) )
-        for (int i=0;i<order; i++) {
-          for (int j=0;j<order;j++) {
-            B[i*order+j] += A[j*order+i];
-            A[j*order+i] += 1.0;
-          }
-        }
+          prk_dgemm(order, A, B, C);
       }
     }
-    trans_time = omp_get_wtime() - trans_time;
+    dgemm_time = omp_get_wtime() - dgemm_time;
   }
 
   //////////////////////////////////////////////////////////////////////
   // Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  const double addit = (iterations+1.) * (iterations/2.);
-  double abserr = 0.0;
-  OMP_PARALLEL_FOR_REDUCE( +:abserr )
+  const double forder = (double)order;
+  const double reference = 0.25 * pow(forder,3) * pow(forder-1.0,2) * (iterations+1.0);
+  double checksum = 0.0;
+  OMP_PARALLEL_FOR_REDUCE( +:checksum )
   for (int j=0; j<order; j++) {
     for (int i=0; i<order; i++) {
-      const size_t ij = i*order+j;
-      const size_t ji = j*order+i;
-      const double reference = (double)(ij)*(1.+iterations)+addit;
-      abserr += fabs(B[ji] - reference);
+      checksum += C[i*order+j];
     }
   }
 
@@ -169,16 +191,18 @@ int main(int argc, char * argv[])
   prk_free(B);
 
 #ifdef VERBOSE
-  printf("Sum of absolute differences: %lf\n", abserr);
+  printf("Reference checksum = %lf, checksum = %lf\n", ref_checksum, checksum);
 #endif
 
   const double epsilon = 1.0e-8;
-  if (abserr < epsilon) {
+  const double residuum = fabs(checksum-reference)/reference;
+  if (residuum < epsilon) {
     printf("Solution validates\n");
-    const double avgtime = trans_time/iterations;
-    printf("Rate (MB/s): %lf Avg time (s): %lf\n", 2.0e-6 * bytes/avgtime, avgtime );
+    const double avgtime = dgemm_time/iterations;
+    double nflops = 2.0*forder*forder*forder;
+    printf("Rate (MFlops/s): %lf  Avg time (s): %lf\n", 1.0E-06 * nflops/avgtime, avgtime);
   } else {
-    printf("ERROR: Aggregate squared error %lf exceeds threshold %lf\n", abserr, epsilon );
+    printf("ERROR: Checksum = %lf, Reference checksum = %lf\n", checksum, reference);
     return 1;
   }
 
