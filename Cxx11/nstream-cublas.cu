@@ -80,7 +80,7 @@ int main(int argc, char * argv[])
   int length;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length> [<grid_stride>]";
+        throw "Usage: <# iterations> <vector length>";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -92,8 +92,6 @@ int main(int argc, char * argv[])
       if (length <= 0) {
         throw "ERROR: vector length must be positive";
       }
-
-      grid_stride   = (argc>3) ? prk::parse_boolean(std::string(argv[4])) : false;
   }
   catch (const char * e) {
     std::cout << e << std::endl;
@@ -140,7 +138,7 @@ int main(int argc, char * argv[])
 
   double scalar(3);
   {
-    for (auto iter = 0; iter<=iterations; iter++) {
+    for (int iter = 0; iter<=iterations; iter++) {
 
       if (iter==1) nstream_time = prk::wtime();
 
@@ -186,13 +184,13 @@ int main(int argc, char * argv[])
 
   double asum(0);
   for (int i=0; i<length; i++) {
-      asum += std::fabs(h_A[i]);
+      asum += prk::abs(h_A[i]);
   }
 
   prk::CUDA::check( cudaFreeHost(h_A) );
 
   double epsilon=1.e-8;
-  if (std::fabs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"

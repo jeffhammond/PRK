@@ -66,7 +66,7 @@
 
 __global__ void nstream(const unsigned n, const prk_float scalar, prk_float * A, const prk_float * B, const prk_float * C)
 {
-    unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
         A[i] += B[i] + scalar * C[i];
     }
@@ -85,18 +85,18 @@ int main(int argc, char * argv[])
   std::cout << "C++11/CUDA STREAM triad: A = B + scalar * C" << std::endl;
 
   prk::CUDA::info info;
-  //info.print();
+  info.print();
 
   //////////////////////////////////////////////////////////////////////
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
   int iterations;
-  int length;
-  bool grid_stride;
+  int length, block_size=256;
+  bool grid_stride = false;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length> [<grid_stride>]";
+        throw "Usage: <# iterations> <vector length> [<block_size>] [<grid_stride>]";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -109,7 +109,13 @@ int main(int argc, char * argv[])
         throw "ERROR: vector length must be positive";
       }
 
-      grid_stride   = (argc>3) ? prk::parse_boolean(std::string(argv[4])) : false;
+      if (argc>3) {
+         block_size = std::atoi(argv[3]);
+      }
+
+      if (argc>4) {
+        grid_stride = prk::parse_boolean(std::string(argv[4]));
+      }
   }
   catch (const char * e) {
     std::cout << e << std::endl;
@@ -118,11 +124,11 @@ int main(int argc, char * argv[])
 
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Vector length        = " << length << std::endl;
+  std::cout << "Block size           = " << block_size << std::endl;
   std::cout << "Grid stride          = " << (grid_stride   ? "yes" : "no") << std::endl;
 
-  const int blockSize = 256;
-  dim3 dimBlock(blockSize, 1, 1);
-  dim3 dimGrid(prk::divceil(length,blockSize), 1, 1);
+  dim3 dimBlock(block_size, 1, 1);
+  dim3 dimGrid(prk::divceil(length,block_size), 1, 1);
 
   info.checkDims(dimBlock, dimGrid);
 
@@ -206,7 +212,7 @@ int main(int argc, char * argv[])
 
   double asum(0);
   for (int i=0; i<length; i++) {
-      asum += std::fabs(h_A[i]);
+      asum += prk::abs(h_A[i]);
   }
 
 #ifndef __CORIANDERCC__
@@ -214,7 +220,7 @@ int main(int argc, char * argv[])
 #endif
 
   double epsilon=1.e-8;
-  if (std::fabs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"

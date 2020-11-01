@@ -64,8 +64,8 @@
 
 __global__ void init(int order, const int matrices, double * A, double * B, double * C)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    auto j = blockIdx.y * blockDim.y + threadIdx.y;
 
     for (int b=0; b<matrices; ++b) {
       if ((i<order) && (j<order)) {
@@ -78,8 +78,8 @@ __global__ void init(int order, const int matrices, double * A, double * B, doub
 
 __global__ void init(int order, const int matrices, double * C)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    auto j = blockIdx.y * blockDim.y + threadIdx.y;
 
     for (int b=0; b<matrices; ++b) {
       if ((i<order) && (j<order)) {
@@ -174,7 +174,7 @@ int main(int argc, char * argv[])
       order = std::atoi(argv[2]);
       if (order <= 0) {
         throw "ERROR: Matrix Order must be greater than 0";
-      } else if (order > std::floor(std::sqrt(INT_MAX))) {
+      } else if (order > prk::get_max_matrix_size()) {
         throw "ERROR: matrix dimension too large - overflow risk";
       }
 
@@ -297,7 +297,7 @@ int main(int argc, char * argv[])
 
   const double epsilon = 1.0e-8;
   const double forder = static_cast<double>(order);
-  const double reference = 0.25 * std::pow(forder,3) * std::pow(forder-1.0,2) * (iterations+1);
+  const double reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
 
   double residuum(0);
   for (int i=0; i<ngpus; ++i) {
@@ -316,7 +316,7 @@ int main(int argc, char * argv[])
 #endif
     std::cout << "Solution validates" << std::endl;
     auto avgtime = dgemm_time/iterations/matrices;
-    auto nflops = 2.0 * std::pow(forder,3) * ngpus;
+    auto nflops = 2.0 * prk::pow(forder,3) * ngpus;
     std::cout << "Rate (MF/s): " << 1.0e-6 * nflops/avgtime
               << " Avg time (s): " << avgtime << std::endl;
   } else {

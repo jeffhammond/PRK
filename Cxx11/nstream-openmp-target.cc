@@ -63,6 +63,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
+#include "prk_openmp.h"
 
 int main(int argc, char * argv[])
 {
@@ -109,7 +110,7 @@ int main(int argc, char * argv[])
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  auto nstream_time = 0.0;
+  double nstream_time{0};
 
   double * RESTRICT A = new double[length];
   double * RESTRICT B = new double[length];
@@ -150,7 +151,7 @@ int main(int argc, char * argv[])
   double ar(0);
   double br(2);
   double cr(2);
-  for (auto i=0; i<=iterations; i++) {
+  for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
 
@@ -159,11 +160,11 @@ int main(int argc, char * argv[])
   double asum(0);
   OMP_PARALLEL_FOR_REDUCE( +:asum )
   for (size_t i=0; i<length; i++) {
-      asum += std::fabs(A[i]);
+      asum += prk::abs(A[i]);
   }
 
   double epsilon=1.e-8;
-  if (std::fabs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"

@@ -122,7 +122,7 @@ int main(int argc, char * argv[])
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  auto nstream_time = 0.0;
+  double nstream_time{0};
 
   double * h_A = new double[length];
   double * h_B = new double[length];
@@ -146,7 +146,7 @@ int main(int argc, char * argv[])
   occa::kernel nstream = device.buildKernel("nstream.okl", "nstream");
 
   {
-    for (auto iter = 0; iter<=iterations; iter++) {
+    for (int iter = 0; iter<=iterations; iter++) {
       if (iter==1) nstream_time = prk::wtime();
       nstream(length, scalar, d_A, d_B, d_C);
       device.finish();
@@ -170,15 +170,15 @@ int main(int argc, char * argv[])
   double br(2);
   double cr(2);
   double ref(0);
-  for (auto i=0; i<=iterations; i++) {
+  for (int i=0; i<=iterations; i++) {
       ar += br + scalar * cr;
   }
 
   ar *= length;
 
   double asum(0);
-  for (auto i=0; i<length; i++) {
-      asum += std::fabs(h_A[i]);
+  for (int i=0; i<length; i++) {
+      asum += prk::abs(h_A[i]);
   }
 
   delete[] h_A;
@@ -186,7 +186,7 @@ int main(int argc, char * argv[])
   delete[] h_C;
 
   double epsilon=1.e-8;
-  if (std::fabs(ar-asum)/asum > epsilon) {
+  if (prk::abs(ar-asum)/asum > epsilon) {
       std::cout << "Failed Validation on output array\n"
                 << std::setprecision(16)
                 << "       Expected checksum: " << ar << "\n"
