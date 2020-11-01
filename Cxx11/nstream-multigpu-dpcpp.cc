@@ -129,7 +129,7 @@ int main(int argc, char * argv[])
   // Allocate space and perform the computation
   //////////////////////////////////////////////////////////////////////
 
-  double nstream_time(0);
+  double nstream_time{0};
 
   auto h_A = prk::vector<double>(length, 0);
   auto h_B = prk::vector<double>(length, 2);

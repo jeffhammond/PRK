@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <cfloat>  // FLT_MIN
 #include <climits>
+#include <cmath>
 
 // Test standard library _after_ standard headers have been included...
 #if !defined(__NVCC__) && !defined(__PGI) && !defined(__ibmxl__) && (defined(__GLIBCXX__) || defined(_GLIBCXX_RELEASE) ) && !defined(_GLIBCXX_USE_CXX11_ABI)
@@ -67,6 +68,17 @@
 # include "prk_ranges.h"
 #endif
 
+// used in OpenMP target and CUDA code because std::min etc are not declare target
+#ifndef MIN
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+#ifndef MAX
+#define MAX(x,y) ((x)>(y)?(x):(y))
+#endif
+#ifndef ABS
+#define ABS(a) ((a) >= 0 ? (a) : -(a))
+#endif
+
 // omp_get_wtime()
 #if defined(USE_OPENMP) && defined(_OPENMP)
 #include <omp.h>
@@ -81,6 +93,17 @@
 #endif
 
 namespace prk {
+
+    // only used in PIC
+    namespace constants {
+        double pi(void) {
+#ifdef M_PI
+            return M_PI;
+#else
+            return 3.14159265358979323846264338327950288419716939937510;
+#endif
+        }
+    }
 
     template <typename T>
     bool is_power_of_2(T n) {

@@ -10,8 +10,10 @@ CXXFLAGS += -pthread
 
 # debugging
 ifdef VERBOSE
-    CXXFLAGS += -DVERBOSE
+    CPPFLAGS += -DVERBOSE
 endif
+
+CXXFLAGS  = $(DEFAULT_OPT_FLAGS) $(CPPFLAGS)
 
 ifeq ($(USE_PRK_TBB_PARTITIONER),static)
     PRK_TBB_PARTITIONER=1
@@ -51,7 +53,7 @@ EXECUTORSFLAGS = $(EXECUTORSFLAG) $(PSTLFLAGS) #$(RANGEFLAGS)
 RAJAFLAGS = $(RAJAFLAG)
 THRUSTFLAGS = $(THRUSTFLAG) $(RANGEFLAGS)
 KOKKOSFLAGS = $(KOKKOSFLAG) $(KOKKOS_BACKEND_FLAG)
-SYCLFLAGS = $(SYCLFLAG) $(BOOSTFLAG) -DUSE_2D_INDEXING=0
+SYCLFLAGS = $(SYCLFLAG)
 ORNLACCFLAGS = $(ORNLACCFLAG)
 
 ifdef OCCADIR
@@ -60,7 +62,7 @@ endif
 OCCAFLAGS = -I${OCCADIR}/include -Wl,-rpath -Wl,${OCCADIR}/lib -L${OCCADIR}/lib -locca
 
 .PHONY: all clean vector valarray openmp target opencl taskloop tbb stl pstl \
-	rangefor kokkos raja cuda cublas sycl sycl-usm sycl-explicit dpcpp dpct \
+	rangefor kokkos raja cuda cublas sycl dpcpp \
 	boost-compute thrust executor oneapi onemkl
 
 EXTRA=
@@ -96,13 +98,16 @@ mpi: nstream-mpi stencil-mpi
 
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
-sycl: nstream-sycl p2p-hyperplane-sycl stencil-sycl transpose-sycl
+sycl: nstream-sycl nstream-sycl-explicit p2p-hyperplane-sycl stencil-sycl transpose-sycl pic-sycl \
+      stencil-2d-sycl transpose-2d-sycl pic-sycl \
+      nstream-sycl-usm nstream-sycl-explicit-usm stencil-sycl-usm transpose-sycl-usm
 
 sycl-usm: nstream-sycl-usm nstream-sycl-explicit-usm stencil-sycl-usm transpose-sycl-usm
 
 sycl-explicit: nstream-sycl-explicit transpose-sycl-explicit
 
-dpcpp: nstream-dpcpp nstream-multigpu-dpcpp stencil-dpcpp stencil-multigpu-dpcpp transpose-dpcpp transpose-multigpu-dpcpp
+dpcpp: sycl nstream-dpcpp nstream-multigpu-dpcpp transpose-dpcpp \
+       nstream-multigpu-dpcpp stencil-multigpu-dpcpp transpose-multigpu-dpcpp
 
 test_dpcpp_collectives: test_dpcpp_collectives.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(SYCLFLAGS) -g $< -o $@
@@ -133,9 +138,15 @@ cublas: nstream-cublas transpose-cublas dgemm-cublas dgemm-multigpu-cublas dgemm
 thrust: nstream-host-thrust nstream-device-thrust \
         transpose-host-thrust transpose-device-thrust
 
+hip: nstream-hip transpose-hip stencil-hip nstream-managed-hip
+
+hipstl: nstream-hipstl
+
+hipblas: nstream-hipblas dgemm-hipblas
+
 onemkl: nstream-onemkl dgemm-onemkl dgemm-multigpu-onemkl
 
-oneapi: onemkl dpcpp sycl sycl-usm sycl-explicit
+oneapi: onemkl dpcpp sycl
 
 occa: transpose-occa nstream-occa
 
@@ -165,6 +176,15 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 %-celerity: %-celerity.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $(BOOSTFLAGS) $(CELERITYINC) $(MPIINC) $< $(CELERITYLIB) $(MPILIB) -o $@
+
+pic: pic.cc prk_util.h random_draw.o
+	$(CXX) $(CXXFLAGS) $< random_draw.o -o $@
+
+pic-sycl: pic-sycl.cc prk_util.h prk_sycl.h random_draw.o
+	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< random_draw.o -o $@
+
+random_draw.o: random_draw.c random_draw.h
+	$(CC) $(DEFAULT_OPT_FLAGS) $(CPPFLAGS) -c $< -o $@
 
 %-dpcpp: %-dpcpp.cc prk_util.h prk_sycl.h
 	$(SYCLCXX) $(CPPFLAGS) $(SYCLFLAGS) $< -o $@
@@ -239,10 +259,19 @@ endif
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $< -o $@
 
 %-mpi-cublas: %-mpi-cublas.cu prk_util.h prk_cuda.h prk_mpi.h
-	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) $< -lcublas $(MPILIB) -o $@
+	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) -DPRK_USE_CUBLAS $< -lcublas $(MPILIB) -o $@
 
 %-cublas: %-cublas.cu prk_util.h prk_cuda.h
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) -DPRK_USE_CUBLAS $< -lcublas -o $@
+
+%-hip: %-hip.cc prk_util.h prk_hip.h
+	$(HIPCC) $(HIPFLAGS) $(CPPFLAGS) $< -o $@
+
+%-hipstl: %-hipstl.cc prk_util.h prk_hip.h
+	$(HIPCC) $(HIPFLAGS) $(RANGEFLAGS) $(CPPFLAGS) -DHIP_THRUST $< -o $@
+
+%-hipblas: %-hipblas.cc prk_util.h prk_hip.h
+	$(HIPCC) $(HIPFLAGS) $(CPPFLAGS) $< -o $@
 
 %-cblas: %-cblas.cc prk_util.h
 	$(CXX) $(CXXFLAGS) $< $(CBLASFLAGS) -o $@

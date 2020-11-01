@@ -1,42 +1,32 @@
 #
-# This file shows the GCC toolchain options for PRKs using
-# OpenMP, MPI and/or Fortran coarrays only.
+# This file shows the CUDA+GCC toolchain options.
 #
 # Base compilers and language options
 #
-GCC_ROOT=${HOME}/GCC/9.3.0/
-GCC_PATH=${GCC_ROOT}bin/
-VERSION=-9
+VERSION=
 # C99 is required in some implementations.
-CC=${GCC_PATH}gcc${VERSION} -std=gnu11
+CC=gcc${VERSION} -std=gnu11
 #EXTRA_CLIBS=-lrt
 # All of the Fortran code is written for the 2008 standard and requires preprocessing.
-FC=${GCC_PATH}gfortran${VERSION} -std=f2008 -cpp
+FC=gfortran${VERSION} -std=f2008 -cpp
 # C++11 may not be required but does no harm here.
-CXX=${GCC_PATH}g++${VERSION} -std=gnu++17
+CXX=g++${VERSION} -std=gnu++17
 #
 # Compiler flags
 #
 # -mtune=native is appropriate for most cases.
 # -march=native is appropriate if you want portable binaries.
 DEFAULT_OPT_FLAGS=-O3 -mtune=native -ffast-math
-DEFAULT_OPT_FLAGS+=-g3
 #DEFAULT_OPT_FLAGS+=-fsanitize=undefined
 #DEFAULT_OPT_FLAGS+=-fsanitize=undefined,leak
 #DEFAULT_OPT_FLAGS+=-fsanitize=address
 #DEFAULT_OPT_FLAGS+=-fsanitize=thread
-# If you are compiling for KNL on a Xeon login node, use the following:
-# DEFAULT_OPT_FLAGS=-g -O3 -march=knl
 # See https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html for details.
 #
 #DEFAULT_OPT_FLAGS+=-fopt-info-vec-missed
 DEFAULT_OPT_FLAGS+=-Wall #-Werror
 DEFAULT_OPT_FLAGS+=-Wno-ignored-attributes -Wno-deprecated-declarations
 #DEFAULT_OPT_FLAGS+=-mavx -mfma
-#
-# GCC runtime libraries
-#
-#DEFAULT_OPT_FLAGS+=-Wl,-rpath=${GCC_ROOT}lib64
 #
 # OpenMP flags
 #
@@ -49,41 +39,38 @@ ORNLACCFLAG=-fopenacc
 #
 # MacOS
 #OPENCLFLAG=-framework OpenCL
-# POCL
-# http://portablecl.org/docs/html/using.html#linking-your-program-directly-with-pocl is not correct...
-#OPENCLFLAG=-I/opt/pocl/latest/include -L/opt/pocl/latest/lib -lpoclu -I/opt/pocl/latest/share/pocl/include -lOpenCL
 # Linux
-#OPENCLDIR=/etc/alternatives
 #OPENCLDIR=/etc/alternatives/opencl-intel-tools
 #OPENCLFLAG=-I${OPENCLDIR} -L${OPENCLDIR}/lib64 -lOpenCL
-OPENCLFLAG=-I/usr/include -L/usr/lib/x86_64-linux-gnu -lOpenCL
-OPENCLFLAG+=-Wno-ignored-attributes -Wno-deprecated-declarations
+#OPENCLFLAG+=-Wno-ignored-attributes -Wno-deprecated-declarations
+#OPENCLFLAG+=-Wno-deprecated-declarations -Wno-missing-braces
 #
 # Metal (MacOS-only, unused)
 #
 #METALFLAG=-framework MetalPerformanceShaders
 #
+# OCCA
+#
+#OCCADIR=${HOME}/prk-repo/Cxx11/occa
+#
 # SYCL flags
 #
 # Intel SYCL - https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedWithSYCLCompiler.md
 #
-SYCLDIR=/nfs/pdx/home/jrhammon/ISYCL/llvm/build/install
-SYCLCXX=${SYCLDIR}/bin/clang++
-SYCLFLAG=-std=gnu++14 -O3
-SYCLFLAG+=-fsycl -fsycl-unnamed-lambda
-SYCLFLAG+=-fsycl-targets=nvptx64-nvidia-cuda-sycldevice
-SYCLFLAG+=-L${SYCLDIR}/lib -lsycl -Wl,-rpath=${SYCLDIR}/lib
-SYCLFLAG+=-ferror-limit=1
-SYCLFLAG+=--gcc-toolchain=${GCC_ROOT}
-SYCLFLAG+=-DPRK_NO_OPENCL_GPU
-SYCLFLAG+=-DDPCPP_CUDA
+#SYCLDIR=/opt/isycl
+#SYCLDIR=${HOME}/ISYCL/llvm/build
+#SYCLCXX=${SYCLDIR}/bin/clang++
+#SYCLFLAG=-g -std=c++17 -O3
+#SYCLFLAG+=-fsycl -fsycl-unnamed-lambda
+#SYCLFLAG+=-L${SYCLDIR}/lib -lsycl -Wl,-rpath=${SYCLDIR}/lib
 #
 # CodePlay ComputeCpp
 #
-#SYCLDIR=${HOME}/ComputeCpp-CE-2.0.0-x86_64-linux-gnu
+#SYCLDIR=/opt/sycl/latest
+#SYCLDIR=/opt/codeplay/latest
 #SYCLCXX=${SYCLDIR}/bin/compute++
 #SYCLFLAG=-sycl-driver -I$(SYCLDIR)/include -L$(SYCLDIR)/lib -Wl,-rpath=$(SYCLDIR)/lib -lComputeCpp
-#SYCLFLAG+=-std=c++17 -O3
+#SYCLFLAG+=-std=c++14 -O3
 # This makes a huge difference in e.g. nstream...
 #SYCLFLAG+=-no-serial-memop
 # CentOS7 and Ubuntu14 built for this
@@ -98,6 +85,7 @@ SYCLFLAG+=-DDPCPP_CUDA
 #
 # hipSYCL
 #
+#SYCLDIR=/opt/hipsycl/usr/local # if installed with DESTDIR
 #SYCLDIR=/opt/hipSYCL
 #SYCLDIR=/opt/spack/spack/opt/spack/linux-ubuntu18.04-haswell/gcc-8.3.0/hipsycl-master-appurj662qod4y4z5zxipr2fwthl66k7
 #SYCLCXX=${SYCLDIR}/bin/syclcc-clang
@@ -107,11 +95,12 @@ SYCLFLAG+=-DDPCPP_CUDA
 #SYCLFLAG+=--hipsycl-platform=cpu
 #SYCLFLAG+=--hipsycl-platform=cuda
 #SYCLFLAG+=--hipsycl-gpu-arch=sm_60
-#SYCLFLAG+=-Wl,-rpath=/opt/hipSYCL/llvm/lib
+#SYCLFLAG+=-Wl,-rpath=/opt/hipSYCL/llvm/lib # wrong?
+#SYCLFLAG+=-Wl,-rpath=${SYCLDIR}/lib
 #
-CELERITYDIR=${SYCLDIR}
-CELERITYINC=-I$(CELERITYDIR)/include/celerity -I$(CELERITYDIR)/include/celerity/vendor
-CELERITYLIB=-L$(CELERITYDIR)/lib -lcelerity_runtime
+#CELERITYDIR=${SYCLDIR}
+#CELERITYINC=-I$(CELERITYDIR)/include/celerity -I$(CELERITYDIR)/include/celerity/vendor
+#CELERITYLIB=-L$(CELERITYDIR)/lib -lcelerity_runtime
 #
 # OCCA
 #
@@ -119,58 +108,12 @@ CELERITYLIB=-L$(CELERITYDIR)/lib -lcelerity_runtime
 #
 # TBB
 #
-#TBBDIR=/usr/lib/x86_64-linux-gnu
-#TBBDIR=/usr/local/Cellar/tbb/2019_U5_1
-TBBDIR=${TBBROOT}
+TBBDIR=/usr/local/Cellar/tbb/2019_U5_1
 TBBFLAG=-I${TBBDIR}/include -L${TBBDIR}/lib -ltbb
 #
 # Parallel STL, Boost, etc.
 #
-BOOSTROOT=${HOME}/PRK/deps/boost/libs
-BOOSTFLAG=
-BOOSTFLAG+=-I${BOOSTROOT}/circular_buffer/include
-BOOSTFLAG+=-I${BOOSTROOT}/compute/include
-BOOSTFLAG+=-I${BOOSTROOT}/algorithm/include
-BOOSTFLAG+=-I${BOOSTROOT}/config/include
-BOOSTFLAG+=-I${BOOSTROOT}/core/include
-BOOSTFLAG+=-I${BOOSTROOT}/log/include
-BOOSTFLAG+=-I${BOOSTROOT}/array/include
-BOOSTFLAG+=-I${BOOSTROOT}/multi_array/include
-BOOSTFLAG+=-I${BOOSTROOT}/optional/include
-BOOSTFLAG+=-I${BOOSTROOT}/preprocessor/include
-BOOSTFLAG+=-I${BOOSTROOT}/type_index/include
-BOOSTFLAG+=-I${BOOSTROOT}/utility/include
-BOOSTFLAG+=-I${BOOSTROOT}/assert/include
-BOOSTFLAG+=-I${BOOSTROOT}/static_assert/include
-BOOSTFLAG+=-I${BOOSTROOT}/exception/include
-BOOSTFLAG+=-I${BOOSTROOT}/throw_exception/include
-BOOSTFLAG+=-I${BOOSTROOT}/concept_check/include
-BOOSTFLAG+=-I${BOOSTROOT}/type_traits/include
-BOOSTFLAG+=-I${BOOSTROOT}/iterator/include
-BOOSTFLAG+=-I${BOOSTROOT}/mpl/include
-BOOSTFLAG+=-I${BOOSTROOT}/detail/include
-BOOSTFLAG+=-I${BOOSTROOT}/functional/include
-BOOSTFLAG+=-I${BOOSTROOT}/move/include
-BOOSTFLAG+=-I${BOOSTROOT}/range/include
-BOOSTFLAG+=-I${BOOSTROOT}/function/include
-BOOSTFLAG+=-I${BOOSTROOT}/integer/include
-BOOSTFLAG+=-I${BOOSTROOT}/container_hash/include
-BOOSTFLAG+=-I${BOOSTROOT}/bind/include
-BOOSTFLAG+=-I${BOOSTROOT}/chrono/include
-BOOSTFLAG+=-I${BOOSTROOT}/predef/include
-BOOSTFLAG+=-I${BOOSTROOT}/ratio/include
-BOOSTFLAG+=-I${BOOSTROOT}/function_types/include
-BOOSTFLAG+=-I${BOOSTROOT}/tuple/include
-BOOSTFLAG+=-I${BOOSTROOT}/lexical_cast/include
-BOOSTFLAG+=-I${BOOSTROOT}/numeric/conversion/include
-BOOSTFLAG+=-I${BOOSTROOT}/container/include
-BOOSTFLAG+=-I${BOOSTROOT}/math/include
-BOOSTFLAG+=-I${BOOSTROOT}/fusion/include
-BOOSTFLAG+=-I${BOOSTROOT}/typeof/include
-BOOSTFLAG+=-I${BOOSTROOT}/uuid/include
-BOOSTFLAG+=-I${BOOSTROOT}/smart_ptr/include
-BOOSTFLAG+=-I${BOOSTROOT}/proto/include
-BOOSTFLAG+=-DBOOST_COMPUTE_USE_CPP11
+BOOSTFLAG=-I/usr/local/Cellar/boost/1.69.0_2/include
 RANGEFLAG=-DUSE_BOOST_IRANGE ${BOOSTFLAG}
 #RANGEFLAG=-DUSE_RANGES_TS -I./range-v3/include
 PSTLFLAG=${OPENMPSIMDFLAG} ${TBBFLAG} -I./pstl/include ${RANGEFLAG}
@@ -180,76 +123,47 @@ RAJADIR=/opt/raja/gcc
 RAJAFLAG=-I${RAJADIR}/include -L${RAJADIR}/lib -lRAJA ${OPENMPFLAG} ${TBBFLAG}
 THRUSTDIR=/opt/nvidia/thrust
 THRUSTFLAG=-I${THRUSTDIR} ${RANGEFLAG}
-EXECUTORSDIR=./libunifex
-EXECUTORSFLAG=-I${EXECUTORSDIR}/include -I${EXECUTORSDIR}/build/include
-# HPX is more complicated...
-HWLOCFLAG=-I/usr/local/include
-HPXDIR=./hpx
-HPXCXX=${HPXDIR}/bin/hpxcxx
-HPXFLAG=-Wno-unused-local-typedef ${HWLOCFLAG}
-# UPC++
-UPCXXDIR=./upcxx
-UPCXX=${UPCXXDIR}/bin/upcxx
-UPCXXFLAG=-codemode={O3,debug}
-UPCXXFLAG+=-std=c++17
-UPCXXFLAG+=-mtune=native -ffast-math
 #
 # CBLAS for C++ DGEMM
 #
-BLASFLAG=-DACCELERATE -framework Accelerate
-CBLASFLAG=-DACCELERATE -framework Accelerate -flax-vector-conversions
+#BLASFLAG=
+#CBLASFLAG=
 #
 # CUDA flags
 #
 # Mac w/ CUDA emulation via https://github.com/hughperkins/coriander
 #NVCC=/opt/llvm/cocl/bin/cocl
 # Linux w/ NVIDIA CUDA
+# NVCC never supports the latest GCC.
+# Use appropriate arch or code is compiled to ancient features.
 NVCC=nvcc
 CUDAFLAGS=-g -O3 -std=c++11
-# Use appropriate arch or code is compiled to ancient features...
-CUDAFLAGS+=-arch=sm_50
-#CUDAFLAGS+=--gpu-architecture=sm_61
-# NVCC never supports the latest GCC...
-#CUDAFLAGS+=--compiler-bindir=<path to older GCC>
-CUDAFLAGS+=-DPRK_USE_CUBLAS
-CUDAFLAGS+=-DPRK_NO_EXCLUSIVE_SCAN
+CUDAFLAGS+=--gpu-architecture=sm_70
+#CUDAFLAGS+=--compiler-bindir=/swtools/gcc/7.5.0/bin
+#CUDAFLAGS+=-forward-unknown-to-host-compiler -fopenmp
+CUDAFLAGS+=-rdc=true # FIXES ptxas fatal   : Unresolved extern function 'cudaCGGetIntrinsicHandle'
 # https://github.com/tensorflow/tensorflow/issues/1066#issuecomment-200574233
 # heavy hammer:
-#CUDAFLAGS+=-D_X86INTRIN_H_INCLUDED
+CUDAFLAGS+=-D_X86INTRIN_H_INCLUDED
 # big hammers:
 #CUDAFLAGS+=-D_IMMINTRIN_H_INCLUDED
 #CUDAFLAGS+=-D_FMA4INTRIN_H_INCLUDED
 #CUDAFLAGS+=-D_XOPMMINTRIN_H_INCLUDED
 # many tiny hammers:
-CUDAFLAGS+=-D_MWAITXINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512FINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512VLINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512BWINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512DQINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512VLBWINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512VBMIVLINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512VBMIINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512VLDQINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512CDINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512PFINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512IFMAINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512IFMAVLINTRIN_H_INCLUDED
-CUDAFLAGS+=-D_AVX512ERINTRIN_H_INCLUDED
-#
-# Halide
-#
-HALIDECXX=c++
-HALIDEDIR=/opt/halide
-HALIDEFLAG=-I${HALIDEDIR}/include
-HALIDEFLAG+=-L${HALIDEDIR}/lib -lhalide
-#HALIDEFLAG+=-D_GLIBCXX_USE_CXX11_ABI=0
-HALIDEFLAG+=${DEFAULT_OPT_FLAGS}
-HALIDEFLAG+=-std=c++17 -g3
-#
-# ISPC
-#
-ISPC=ispc
-ISPCFLAG=-O3 --target=host --opt=fast-math
+#CUDAFLAGS+=-D_MWAITXINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512FINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512VLINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512BWINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512DQINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512VLBWINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512VBMIVLINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512VBMIINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512VLDQINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512CDINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512PFINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512IFMAINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512IFMAVLINTRIN_H_INCLUDED
+#CUDAFLAGS+=-D_AVX512ERINTRIN_H_INCLUDED
 #
 # MPI-3
 #
@@ -292,8 +206,4 @@ PETSCFLAG+=-Wl,-rpath=${PETSCDIR}/lib
 COARRAYFLAG=-fcoarray=single -lcaf_single
 # multi-node
 # COARRAYFLAG=-fcoarray=lib -lcaf_mpi
-#
-# MEMKIND (used in C1z)
-#
-MEMKINDDIR=/home/parallels/PRK/deps
-MEMKINDFLAGS=-I${MEMKINDDIR}/include -L${MEMKINDDIR}/lib -lmemkind -Wl,-rpath=${MEMKINDDIR}/lib
+
