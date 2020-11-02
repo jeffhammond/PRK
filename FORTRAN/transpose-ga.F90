@@ -76,6 +76,7 @@ program main
   integer :: mylo(2),myhi(2)
   real(kind=REAL64), parameter :: one  = 1.d0
   real(kind=REAL64), allocatable ::  T(:,:)
+  real(kind=REAL64), allocatable ::  T2(:,:)
   ! problem definition
   integer(kind=INT32) ::  iterations
   integer(kind=INT32) ::  order
