@@ -12,7 +12,7 @@
 CC=icx -std=c11 -pthread
 #EXTRA_CLIBS=-lrt
 # All of the Fortran code is written for the 2008 standard and requires preprocessing.
-FC=ifx -std08 -fpp
+FC=ifx -fpp
 # C++11 may not be required but does no harm here.
 CXX=icpx -std=c++17 -pthread
 #
@@ -105,6 +105,16 @@ CUDAFLAGS=-g -O3 -std=c++11
 CUDAFLAGS+=-arch=sm_50
 # https://github.com/tensorflow/tensorflow/issues/1066#issuecomment-200574233
 CUDAFLAGS+=-D_MWAITXINTRIN_H_INCLUDED
+#
+# Halide
+#
+HALIDECXX=c++
+HALIDEDIR=/opt/halide/Halide-10.0.0-x86-64-linux
+HALIDEFLAG=-I${HALIDEDIR}/include
+HALIDEFLAG+=-Wl,-rpath=${HALIDEDIR}/lib -L${HALIDEDIR}/lib -lHalide
+#HALIDEFLAG+=-D_GLIBCXX_USE_CXX11_ABI=0
+HALIDEFLAG+=${DEFAULT_OPT_FLAGS}
+HALIDEFLAG+=-std=c++17
 #
 # ISPC
 #

@@ -12,7 +12,7 @@
 CC=icc -std=c11 -pthread
 #EXTRA_CLIBS=-lrt
 # All of the Fortran code is written for the 2008 standard and requires preprocessing.
-FC=ifort -std08 -fpp
+FC=ifort -fpp
 # C++11 may not be required but does no harm here.
 CXX=icpc -std=c++17 -pthread
 #
