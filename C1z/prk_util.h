@@ -32,6 +32,10 @@
 #ifndef PRK_UTIL_H
 #define PRK_UTIL_H
 
+#ifndef PRKVERSION
+#define PRKVERSION (-1)
+#endif
+
 #if !(defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L))
 # error You need a C99+ compiler.
 #endif
