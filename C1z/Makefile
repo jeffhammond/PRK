@@ -72,7 +72,7 @@ openmp: nstream-openmp p2p-simd-openmp \
 
 tasks: p2p-tasks-openmp p2p-tasks-2d-openmp
 
-mpi: nstream-mpi
+mpi: nstream-mpi transpose-mpi
 
 petsc: nstream-petsc transpose-petsc
 
