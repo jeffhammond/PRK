@@ -78,6 +78,7 @@ C1z/transpose-2d
 C1z/transpose-2d-openmp
 C1z/transpose-cilk
 C1z/transpose-ispc
+C1z/transpose-mpi
 C1z/transpose-openmp
 C1z/transpose-petsc
 C1z/transpose-target
