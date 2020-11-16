@@ -94,9 +94,11 @@ int main(int argc, char * argv[])
       printf("ERROR: Matrix Order must be greater than 0\n");
       MPI_Abort(MPI_COMM_WORLD,1);
     }
-    if ((order & np) != 0) {
+    if ((order % np) != 0) {
       printf("ERROR: Matrix Order should be divisible by # procs, %d\n", np);
       MPI_Abort(MPI_COMM_WORLD,1);
+    } else {
+        block_order = order / np;
     }
 
     // default tile size for tiling of local transpose
@@ -136,56 +138,66 @@ int main(int argc, char * argv[])
   double * restrict B = prk_malloc(bytes);
   double * restrict T = prk_malloc(bytes);
 
-  {
-    for (int i=0;i<order; i++) {
-      for (int j=0;j<block_order;j++) {
-        A[i*order+j] = (double)(offset+i*order+j);
-        B[i*order+j] = 0.0;
-      }
+  for (int i=0;i<order; i++) {
+    for (int j=0;j<block_order;j++) {
+      A[i*order+j] = (double)(offset+i*order+j);
+      B[i*order+j] = 0.0;
     }
-
-    for (int iter = 0; iter<=iterations; iter++) {
-
-      if (iter==1) {
-          MPI_Barrier(MPI_COMM_WORLD);
-          trans_time = prk_wtime();
-      }
-
-      // this is designed to match the mpi4py implementation,
-      // which uses ~50% more memory than the C89/MPI1 version.
-
-      // global transpose - change to large-count version some day
-      MPI_Alltoall(A, count, MPI_DOUBLE, T, count, MPI_DOUBLE, MPI_COMM_WORLD);
-
-      // local transpose
-      for (int r=0; r<np; r++) {
-        const size_t lo = block_order * r;
-        const size_t hi = block_order * (r+1);
-        for (size_t i=lo;i<hi; i++) {
-          for (size_t j=0;j<order;j++) {
-            B[i*order+j] += T[j*order+i];
-          }
-        }
-      }
-
-      // A += 1
-      for (size_t j=0;j<block_order;j++) {
-        for (size_t i=0;i<order; i++) {
-          A[j*order+i] += 1.0;
-        }
-      }
-
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-    trans_time = prk_wtime() - trans_time;
   }
+
+  for (int iter = 0; iter<=iterations; iter++) {
+
+    if (iter==1) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        trans_time = prk_wtime();
+    }
+
+    // this is designed to match the mpi4py implementation,
+    // which uses ~50% more memory than the C89/MPI1 version.
+
+    // global transpose - change to large-count version some day
+    MPI_Alltoall(A, count, MPI_DOUBLE,
+                 T, count, MPI_DOUBLE,
+                 MPI_COMM_WORLD);
+
+    // local transpose
+    for (int r=0; r<np; r++) {
+      const size_t lo = block_order * r;
+      const size_t hi = block_order * (r+1);
+      for (size_t i=lo;i<hi; i++) {
+        for (size_t j=0;j<order;j++) {
+          B[i*order+j] += T[j*order+i];
+        }
+      }
+    }
+
+    // A += 1
+    for (size_t j=0;j<block_order;j++) {
+      for (size_t i=0;i<order; i++) {
+        A[j*order+i] += 1.0;
+      }
+    }
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  trans_time = prk_wtime() - trans_time;
+
+  MPI_Allreduce(MPI_IN_PLACE, &trans_time, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
   //////////////////////////////////////////////////////////////////////
   // Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  const double addit = (iterations+1.) * (iterations/2.);
   double abserr = 0.0;
+  const double addit = (iterations+1.) * (iterations/2.);
+#if 0
+  size_t colstart = block_order * me;
+  for (size_t j=0;j<block_order;j++) {
+      for (size_t i=0;i<order; i++) {
+          const size_t ji = j*order+i;
+          abserr += fabs(B[ji] - (double)((order*i + j+colstart)*(iterations+1)+addit));
+      }
+  }
+#else
   for (int j=0; j<order; j++) {
     for (int i=0; i<order; i++) {
       const size_t ij = i*order+j;
@@ -194,6 +206,7 @@ int main(int argc, char * argv[])
       abserr += fabs(B[ji] - reference);
     }
   }
+#endif
 
   prk_free(A);
   prk_free(B);
@@ -208,7 +221,7 @@ int main(int argc, char * argv[])
     const double avgtime = trans_time/iterations;
     printf("Rate (MB/s): %lf Avg time (s): %lf\n", 2.0e-6 * bytes/avgtime, avgtime );
   } else {
-    printf("ERROR: Aggregate squared error %lf exceeds threshold %lf\n", abserr, epsilon );
+    printf("ERROR: Aggregate squared error %e exceeds threshold %e\n", abserr, epsilon );
     return 1;
   }
 
