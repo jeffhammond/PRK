@@ -13,6 +13,8 @@
 
 #include <mpi.h>
 
+//#include "prk_mpi_datatype.h"
+
 #define ENABLE_SHM 1
 #define STL_VECTOR_API 1
 
@@ -102,6 +104,31 @@ namespace prk
 
         void barrier(MPI_Comm comm = MPI_COMM_WORLD) {
             prk::MPI::check( MPI_Barrier(comm) );
+        }
+
+        template <typename T>
+        void alltoall(const T * in, T * out, int count, MPI_Comm comm = MPI_COMM_WORLD) {
+            if ( count > (MPI_INT/sizeof(T)) ) {
+                std::cout << "count is going to overflow MPI_Alltoall" << std::endl;
+                prk::MPI::abort();
+            }
+            const int bytes = static_cast<int>(count*sizeof(T));
+            prk::MPI::check( MPI_Alltoall( in, bytes, MPI_BYTE, out, bytes, MPI_BYTE, comm) );
+        }
+
+        template <typename T>
+        void alltoall(const std::vector<T> & in, std::vector<T> & out, MPI_Comm comm = MPI_COMM_WORLD) {
+            if ( in.size() != out.size() ) {
+                std::cout << "input and output vector lengths do not match" << std::endl;
+                prk::MPI::abort();
+            }
+            if ( in.size() > (MPI_INT/sizeof(T)) ) {
+                std::cout << "vector size is going to overflow MPI_Alltoall" << std::endl;
+                prk::MPI::abort();
+            }
+            const int count = static_cast<int>(in.size());
+            const int bytes = static_cast<int>(count*sizeof(T));
+            prk::MPI::check( MPI_Alltoall( in.data(), bytes, MPI_BYTE, out.data(), bytes, MPI_BYTE, comm) );
         }
 
         double min(double in, MPI_Comm comm = MPI_COMM_WORLD) {
