@@ -132,56 +132,82 @@ int main(int argc, char * argv[])
 
   double trans_time = 0.0;
 
-  size_t bytes = order*block_order*sizeof(double);
-  size_t offset = me * block_order;
+  size_t bytes = count*sizeof(double);
   double * restrict A = prk_malloc(bytes);
   double * restrict B = prk_malloc(bytes);
   double * restrict T = prk_malloc(bytes);
 
-  for (int i=0;i<order; i++) {
-    for (int j=0;j<block_order;j++) {
-      A[i*order+j] = (double)(offset+i*order+j);
+  for (size_t i=0; i<order; i++) {
+    for (size_t j=0; j<block_order; j++) {
+      const size_t offset = me * block_order;
+      A[i*order+j] = (double)(i*order+offset+j);
       B[i*order+j] = 0.0;
+      T[i*order+j] = 0.0;
     }
   }
+  MPI_Barrier(MPI_COMM_WORLD);
 
   for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) {
         MPI_Barrier(MPI_COMM_WORLD);
-        trans_time = prk_wtime();
+        trans_time = MPI_Wtime();
     }
 
     // this is designed to match the mpi4py implementation,
     // which uses ~50% more memory than the C89/MPI1 version.
+
+    // printing only
+    for (int r=0; r<np; r++) {
+      if (me==r) {
+        for (size_t i=0; i<order; i++) {
+          for (size_t j=0; j<block_order; j++) {
+            printf("%d: A(%zu,%zu)=%lf\n", me, i, j, A[i*order+j]);
+          }
+        }
+        fflush(stdout);
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
 
     // global transpose - change to large-count version some day
     MPI_Alltoall(A, count, MPI_DOUBLE,
                  T, count, MPI_DOUBLE,
                  MPI_COMM_WORLD);
 
+    // printing only
+    for (int r=0; r<np; r++) {
+      if (me==r) {
+        for (size_t i=0; i<order; i++) {
+          for (size_t j=0; j<block_order; j++) {
+            printf("%d: T(%zu,%zu)=%lf\n", me, i, j, T[i*order+j]);
+          }
+        }
+        fflush(stdout);
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     // local transpose
     for (int r=0; r<np; r++) {
       const size_t lo = block_order * r;
       const size_t hi = block_order * (r+1);
-      for (size_t i=lo;i<hi; i++) {
-        for (size_t j=0;j<order;j++) {
+      for (size_t i=lo; i<hi; i++) {
+        for (size_t j=0; j<order; j++) {
           B[i*order+j] += T[j*order+i];
         }
       }
     }
 
     // A += 1
-    for (size_t j=0;j<block_order;j++) {
+    for (size_t j=0;j<block_order; j++) {
       for (size_t i=0;i<order; i++) {
         A[j*order+i] += 1.0;
       }
     }
   }
   MPI_Barrier(MPI_COMM_WORLD);
-  trans_time = prk_wtime() - trans_time;
-
-  MPI_Allreduce(MPI_IN_PLACE, &trans_time, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  trans_time = MPI_Wtime() - trans_time;
 
   //////////////////////////////////////////////////////////////////////
   // Analyze and output results
@@ -189,27 +215,18 @@ int main(int argc, char * argv[])
 
   double abserr = 0.0;
   const double addit = (iterations+1.) * (iterations/2.);
-#if 0
-  size_t colstart = block_order * me;
-  for (size_t j=0;j<block_order;j++) {
-      for (size_t i=0;i<order; i++) {
-          const size_t ji = j*order+i;
-          abserr += fabs(B[ji] - (double)((order*i + j+colstart)*(iterations+1)+addit));
-      }
-  }
-#else
-  for (int j=0; j<order; j++) {
-    for (int i=0; i<order; i++) {
+  for (size_t j=0; j<order; j++) {
+    for (size_t i=0; i<order; i++) {
       const size_t ij = i*order+j;
       const size_t ji = j*order+i;
       const double reference = (double)(ij)*(1.+iterations)+addit;
       abserr += fabs(B[ji] - reference);
     }
   }
-#endif
 
-  prk_free(A);
-  prk_free(B);
+  //prk_free(A);
+  //prk_free(B);
+  //prk_free(T);
 
 #ifdef VERBOSE
   printf("Sum of absolute differences: %lf\n", abserr);
