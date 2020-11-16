@@ -138,13 +138,25 @@ int main(int argc, char * argv[])
     std::vector<double> B(count);
     std::vector<double> T(count);
 
-    for (size_t i=0; i<order; i++) {
+    try {
       for (size_t j=0; j<block_order; j++) {
-        const size_t offset = me * block_order;
-        A[i*order+j] = (double)(i*order+offset+j);
-        B[i*order+j] = 0.0;
-        T[i*order+j] = 0.0;
+        for (size_t i=0; i<order; i++) {
+          const size_t offset = me * block_order;
+#if 0
+          A[i*order+j] = (double)(i*order+offset+j);
+          B[i*order+j] = 0.0;
+          T[i*order+j] = 0.0;
+#else
+          A.at(j*order+i) = (double)(i*order+offset+j);
+          B.at(j*order+i) = 0.0;
+          T.at(j*order+i) = 0.0;
+#endif
+        }
       }
+    }
+    catch (const char * e) {
+      std::cout << e << std::endl;
+      prk::MPI::abort();
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -159,16 +171,22 @@ int main(int argc, char * argv[])
       // which uses ~50% more memory than the C89/MPI1 version.
 
       // printing only
-      for (int r=0; r<np; r++) {
-        if (me==r) {
-          for (size_t i=0; i<order; i++) {
+      try {
+        for (int r=0; r<np; r++) {
+          if (me==r) {
             for (size_t j=0; j<block_order; j++) {
-              printf("%d: A(%zu,%zu)=%lf\n", me, i, j, A[i*order+j]);
+              for (size_t i=0; i<order; i++) {
+                printf("%d: A(%zu,%zu)=%lf\n", me, i, j, A.at(j*order+i));
+              }
             }
+            fflush(stdout);
           }
-          fflush(stdout);
+          MPI_Barrier(MPI_COMM_WORLD);
         }
-        MPI_Barrier(MPI_COMM_WORLD);
+      }
+      catch (const char * e) {
+        std::cout << e << std::endl;
+        prk::MPI::abort();
       }
 
       // global transpose - change to large-count version some day
@@ -177,9 +195,9 @@ int main(int argc, char * argv[])
       // printing only
       for (int r=0; r<np; r++) {
         if (me==r) {
-          for (size_t i=0; i<order; i++) {
-            for (size_t j=0; j<block_order; j++) {
-              printf("%d: T(%zu,%zu)=%lf\n", me, i, j, T[i*order+j]);
+          for (size_t j=0; j<block_order; j++) {
+            for (size_t i=0; i<order; i++) {
+              printf("%d: T(%zu,%zu)=%lf\n", me, j, i, T.at(j*order+i));
             }
           }
           fflush(stdout);
@@ -191,9 +209,13 @@ int main(int argc, char * argv[])
       for (int r=0; r<np; r++) {
         const size_t lo = block_order * r;
         const size_t hi = block_order * (r+1);
-        for (size_t i=lo; i<hi; i++) {
-          for (size_t j=0; j<order; j++) {
-            B[i*order+j] += T[j*order+i];
+        for (size_t j=0; j<order; j++) {
+          for (size_t i=lo; i<hi; i++) {
+#if 0
+            B[j*order+i] += T[i*order+j];
+#else
+            B.at(j*order+i) += T[i*order+j];
+#endif
           }
         }
       }
@@ -201,7 +223,11 @@ int main(int argc, char * argv[])
       // A += 1
       for (size_t j=0;j<block_order; j++) {
         for (size_t i=0;i<order; i++) {
+#if 0
           A[j*order+i] += 1.0;
+#else
+          A.at(j*order+i) += 1.0;
+#endif
         }
       }
     }
@@ -219,7 +245,7 @@ int main(int argc, char * argv[])
         const size_t ij = i*order+j;
         const size_t ji = j*order+i;
         const double reference = (double)(ij)*(1.+iterations)+addit;
-        abserr += fabs(B[ji] - reference);
+        abserr += fabs(B.at(ji) - reference);
       }
     }
 
