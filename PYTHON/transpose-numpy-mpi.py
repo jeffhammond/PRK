@@ -133,7 +133,9 @@ def main():
     if (me==0):
         print('Number of ranks      = ', np)
         print('Number of iterations = ', iterations)
-        print('Matrix order         = ', order)
+        print('Matrix order         = ', order,flush=True)
+
+    comm.Barrier()
 
     # ********************************************************************
     # ** Allocate space for the input and transpose matrix
@@ -143,6 +145,14 @@ def main():
     A = numpy.fromfunction(lambda i,j: offset+i*order+j, (order,block_order), dtype=float)
     B = numpy.zeros((order,block_order))
     T = numpy.zeros((order,block_order))
+    comm.Barrier()
+
+    for r in range(0,np):
+        if (me==r):
+            print("me=",me,"A=")
+            print(A)
+            print("=========================",flush=True)
+        comm.Barrier()
 
     for k in range(0,iterations+1):
 
