@@ -32,28 +32,32 @@
 #ifndef PRK_PSTL_H
 #define PRK_PSTL_H
 
-#if defined(__GNUC__) && (__GNUC__ >= 9)
-
+#if __has_include( <execution> )
 # include <execution>
-# include <algorithm>
-# include <numeric>
-namespace exec = __pstl::execution;
-
-#elif defined(USE_LLVM_PSTL)
-
+#elif __has_include( <__pstl_execution> )
 # include <__pstl_execution>
+#endif
+
+#if __has_include( <algorithm> )
+# include <algorithm>
+#elif __has_include( <__pstl_algorithm> )
 # include <__pstl_algorithm>
+#endif
+
+#if __has_include( <numeric> )
+# include <numeric>
+#elif __has_include( <__pstl_numeric> )
 # include <__pstl_numeric>
+#endif
+
 namespace exec = std::execution;
 
-#elif defined(USE_ONEAPI_DPL)
+#if 0
 
 # include <oneapi/dpl/execution>
 # include <oneapi/dpl/algorithm>
 # include <oneapi/dpl/numeric>
 namespace exec = std::execution;
-
-#elif defined(USE_GITHUB_PSTL)
 
 # include <pstl/execution>
 # include <pstl/algorithm>
