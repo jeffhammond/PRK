@@ -91,7 +91,7 @@ program main
   ! ********************************************************************
 
   write(*,'(a25)') 'Parallel Research Kernels'
-  write(*,'(a61)') 'Fortran BLAS Dense matrix-matrix multiplication: C += A x B'
+  write(*,'(a59)') 'Fortran BLAS Dense matrix-matrix multiplication: C += A x B'
 
   if (command_argument_count().lt.2) then
     write(*,'(a17,i1)') 'argument count = ', command_argument_count()
@@ -190,7 +190,7 @@ program main
     write(*,'(a)') 'Solution validates'
     avgtime = dgemm_time/iterations
     nflops = 2 * int(order,INT64)**3
-    write(*,'(a,f13.6,a,f10.6)') 'Rate (MF/s): ',(1.d-6*nflops)/avgtime, &
+    write(*,'(a,f13.3,a,f10.6)') 'Rate (MF/s): ',(1.d-6*nflops)/avgtime, &
            ' Avg time (s): ', avgtime
   else
     write(*,'(a,e30.15)') 'Reference checksum = ', reference
