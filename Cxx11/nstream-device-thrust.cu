@@ -105,9 +105,9 @@ int main(int argc, char * argv[])
 
   double nstream_time{0};
 
-  thrust::device_vector<double> A(length);
-  thrust::device_vector<double> B(length);
-  thrust::device_vector<double> C(length);
+  thrust::universal_vector<double> A(length);
+  thrust::universal_vector<double> B(length);
+  thrust::universal_vector<double> C(length);
 
   double scalar(3);
   {
