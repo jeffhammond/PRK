@@ -44,9 +44,9 @@ RANGEFLAGS = $(RANGEFLAG) -DUSE_RANGES
 # add Boost for transform + zip_iterator
 STLFLAGS = $(STLFLAG) $(RANGEFLAGS) $(BOOSTFLAGS)
 PSTLFLAGS = $(PSTLFLAG) $(RANGEFLAGS)
-EXECUTORSFLAGS = $(EXECUTORSFLAG) $(PSTLFLAGS) #$(RANGEFLAGS)
+EXECUTORSFLAGS = $(EXECUTORSFLAG) $(PSTLFLAGS)
 RAJAFLAGS = $(RAJAFLAG)
-THRUSTFLAGS = $(THRUSTFLAG) $(RANGEFLAGS)
+THRUSTFLAGS = $(THRUSTFLAG)
 KOKKOSFLAGS = $(KOKKOSFLAG) $(KOKKOS_BACKEND_FLAG)
 SYCLFLAGS = $(SYCLFLAG)
 OPENACCFLAGS = $(OPENACCFLAG)
@@ -122,8 +122,10 @@ hipstl: nstream-hipstl
 
 hipblas: nstream-hipblas sgemm-hipblas dgemm-hipblas transpose-hipblas
 
-thrust: nstream-host-thrust nstream-device-thrust \
-        transpose-host-thrust transpose-device-thrust
+#thrust: nstream-host-thrust nstream-device-thrust \
+#        transpose-host-thrust transpose-device-thrust
+
+thrust: nstream-device-thrust transpose-device-thrust
 
 cublas: transpose-cublas nstream-cublas dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas sgemm-cublas
 
