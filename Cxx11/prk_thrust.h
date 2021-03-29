@@ -1,5 +1,6 @@
 ///
 /// Copyright (c) 2018, Intel Corporation
+/// Copyright (c) 2021, NVIDIA
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -32,22 +33,9 @@
 #ifndef PRK_THRUST_H
 #define PRK_THRUST_H
 
-#ifdef __NVCC__
-# include <thrust/device_vector.h>
+#include <thrust/universal_vector.h>
+#include <thrust/execution_policy.h>
 
-#elif defined(_OPENMP)
-# define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_OMP
-# include <thrust/system/omp/execution_policy.h>
-//#  include <thrust/system/omp/vector.h>
-
-#else
-#  define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_CPP
-#  include <thrust/system/omp/execution_policy.h>
-//#  include <thrust/system/cpp/vector.h>
-
-#endif
-
-#include <thrust/host_vector.h>
 #include <thrust/fill.h>
 #include <thrust/transform.h>
 #include <thrust/transform_reduce.h>
@@ -55,6 +43,5 @@
 #include <thrust/sequence.h>
 #include <thrust/for_each.h>
 #include <thrust/iterator/counting_iterator.h>
-#include <thrust/execution_policy.h>
 
 #endif /* PRK_THRUST_H */
