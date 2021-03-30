@@ -267,40 +267,6 @@ int main(int argc, char * argv[])
   //////////////////////////////////////////////////////////////////////
 
   try {
-    sycl::queue q(sycl::host_selector{}, sycl::property::queue::in_order{});
-    prk::SYCL::print_device_platform(q);
-    run<float>(q, iterations, n, block_size, star, radius);
-    run<double>(q, iterations, n, block_size, star, radius);
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
-
-  try {
-    sycl::queue q(sycl::cpu_selector{}, sycl::property::queue::in_order{});
-    prk::SYCL::print_device_platform(q);
-    run<float>(q, iterations, n, block_size, star, radius);
-    run<double>(q, iterations, n, block_size, star, radius);
-  }
-  catch (sycl::exception & e) {
-    std::cout << e.what() << std::endl;
-    prk::SYCL::print_exception_details(e);
-  }
-  catch (std::exception & e) {
-    std::cout << e.what() << std::endl;
-  }
-  catch (const char * e) {
-    std::cout << e << std::endl;
-  }
-
-  try {
     sycl::queue q(sycl::gpu_selector{}, sycl::property::queue::in_order{});
     prk::SYCL::print_device_platform(q);
     bool has_fp64 = prk::SYCL::has_fp64(q);

@@ -53,34 +53,26 @@
 #include "prk_cuda.h"
 #include "prk_thrust.h"
 
-struct x : public thrust::unary_function<void,int>
+struct printf_functor
 {
-    int i;
-    int order;
-    thrust::device_vector<double> & A;
-    thrust::device_vector<double> & B;
-
-    x(int i, int order, thrust::device_vector<double> & A, thrust::device_vector<double> & B) :
-        i(i), order(order), A(A), B(B) {}
-
-    __host__ __device__
-    void operator()(int j)
-    {
-        B[i*order+j] += A[j*order+i];
-        A[j*order+i] += 1.0;
-        return;
-    }
+  __host__ __device__
+  void operator()(int x)
+  {
+    // note that using printf in a __device__ function requires
+    // code compiled for a GPU with compute capability 2.0 or
+    // higher (nvcc --arch=sm_20)
+    printf("%d\n", x);
+  }
 };
 
-//__device__
-void transpose(const int order, thrust::device_vector<double> & A, thrust::device_vector<double> & B)
+struct square : public thrust::unary_function<int,int>
 {
-    thrust::counting_iterator<int> start(0);
-    thrust::counting_iterator<int> end = start + order;
-    thrust::for_each( thrust::device, start, end, [=,&A,&B] (int i) {
-      thrust::for_each( thrust::device, start, end, x(i,order,A,B) );
-    });
-}
+  __host__ __device__
+  int operator()(int x) const
+  {
+    return x * x;
+  }
+};
 
 int main(int argc, char * argv[])
 {
@@ -124,13 +116,19 @@ int main(int argc, char * argv[])
   /// Allocate space for the input and transpose matrix
   //////////////////////////////////////////////////////////////////////
 
-  thrust::device_vector<double> A(order*order);
-  thrust::device_vector<double> B(order*order);
+  thrust::universal_vector<double> A(order*order);
+  thrust::universal_vector<double> B(order*order);
   // fill A with the sequence 0 to order^2-1 as doubles
   thrust::sequence(thrust::device, A.begin(), A.end() );
   thrust::fill(thrust::device, B.begin(), B.end(), 0.0);
 
-  auto range = prk::range(0,order);
+  thrust::counting_iterator<int> first(0);
+  thrust::counting_iterator<int> last(order);
+  thrust::for_each(thrust::device, first, last, printf_functor() );
+
+  //thrust::transform_iterator<int> first2(0,[=](int x){ return x*x; });
+  //thrust::transform_iterator<int> last2(order*order);
+  //thrust::for_each(thrust::device, first2, last2, printf_functor() );
 
   double trans_time{0};
 
@@ -138,9 +136,7 @@ int main(int argc, char * argv[])
 
     if (iter==1) trans_time = prk::wtime();
 
-#if 1
-    transpose(order, A, B);
-#else
+#if 0
     thrust::for_each( std::begin(range), std::end(range), [=,&A,&B] (int i) {
       thrust::for_each( std::begin(range), std::end(range), [=,&A,&B] (int j) {
         B[i*order+j] += A[j*order+i];
@@ -155,11 +151,11 @@ int main(int argc, char * argv[])
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  // TODO: replace with std::generate, std::accumulate, or similar
   const double addit = (iterations+1.) * (iterations/2.);
   double abserr(0);
-  for (auto i : range) {
-    for (auto j : range) {
+  // TODO: replace with std::generate, std::accumulate, or similar
+  for (int j=0; j<order; j++) {
+    for (int i=0; i<order; i++) {
       const int ij = i*order+j;
       const int ji = j*order+i;
       const double reference = static_cast<double>(ij)*(1.+iterations)+addit;

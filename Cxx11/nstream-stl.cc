@@ -63,9 +63,11 @@
 
 #include "prk_util.h"
 
+#if 0
 #include "boost/iterator/zip_iterator.hpp"
 #include "boost/tuple/tuple.hpp"
 #include "boost/tuple/tuple_comparison.hpp"
+#endif
 
 int main(int argc, char * argv[])
 {
@@ -125,7 +127,7 @@ int main(int argc, char * argv[])
 
       if (iter==1) nstream_time = prk::wtime();
 
-#if 0
+#if 1
       // stupid version
       std::transform( std::begin(A), std::end(A), std::begin(B), std::begin(A),
                       [](auto&& x, auto&& y) {
