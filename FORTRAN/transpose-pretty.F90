@@ -1,5 +1,6 @@
 !
 ! Copyright (c) 2015, Intel Corporation
+! Copyright (c) 2021, NVIDIA
 !
 ! Redistribution and use in source and binary forms, with or without
 ! modification, are permitted provided that the following conditions
@@ -60,6 +61,10 @@ end function prk_get_wtime
 
 program main
   use iso_fortran_env
+#ifdef NVHPC
+  use cutensorex
+  use cudafor
+#endif
   implicit none
   real(kind=REAL64) :: prk_get_wtime
   ! for argument parsing
@@ -137,7 +142,8 @@ program main
   do k=0,iterations
     ! start timer after a warmup iteration
     if (k.eq.1) t0 = prk_get_wtime()
-    B = B + transpose(A)
+    !B = B + transpose(A)
+    B = reshape(B, (/order, order/)) + transpose(A)
     A = A + 1
   enddo ! iterations
 
