@@ -122,10 +122,7 @@ hipstl: nstream-hipstl
 
 hipblas: nstream-hipblas sgemm-hipblas dgemm-hipblas transpose-hipblas
 
-#thrust: nstream-host-thrust nstream-device-thrust \
-#        transpose-host-thrust transpose-device-thrust
-
-thrust: nstream-device-thrust transpose-device-thrust
+thrust: nstream-thrust transpose-thrust
 
 cublas: transpose-cublas nstream-cublas dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas sgemm-cublas
 
@@ -240,10 +237,6 @@ else
 	$(info PRK help: Set USE_PRK_KOKKOS_BACKEND={Threads,Serial,Cuda} when invoking make to not use OpenMP)
 	$(CXX) $(CXXFLAGS) $< $(KOKKOSFLAGS) -o $@
 endif
-
-# for host execution
-%-thrust: %-thrust.cc prk_util.h prk_thrust.h
-	$(CXX) $(CXXFLAGS) $< $(THRUSTFLAGS) -o $@
 
 # for device execution (must compiler as .cu)
 %-thrust: %-thrust.cu prk_util.h prk_thrust.h
