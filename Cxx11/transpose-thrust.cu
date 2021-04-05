@@ -1,5 +1,6 @@
 ///
 /// Copyright (c) 2013, Intel Corporation
+/// Copyright (c) 2021, NVIDIA
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -130,20 +131,27 @@ int main(int argc, char * argv[])
   //thrust::transform_iterator<int> last2(order*order);
   //thrust::for_each(thrust::device, first2, last2, printf_functor() );
 
+  //auto range = std::views::iota(0,order);
+  thrust::universal_vector<int> range(order);
+  thrust::sequence(range.begin(), range.end());
+
   double trans_time{0};
 
   for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) trans_time = prk::wtime();
 
-#if 0
-    thrust::for_each( std::begin(range), std::end(range), [=,&A,&B] (int i) {
-      thrust::for_each( std::begin(range), std::end(range), [=,&A,&B] (int j) {
-        B[i*order+j] += A[j*order+i];
-        A[j*order+i] += 1.0;
-      });
+    thrust::for_each( thrust::device,
+                      std::begin(range), std::end(range),
+                      [=] __device__ (int i) {
+      //thrust::for_each( thrust::device, std::begin(range), std::end(range), [&] (int j) {
+      //std::for_each( std::begin(range), std::end(range), [&] (int j) {
+      for (int j=0; j<order; j++) {
+          B[i*order+j] += A[j*order+i];
+          A[j*order+i] += 1.0;
+      };
+      //});
     });
-#endif
   }
   trans_time = prk::wtime() - trans_time;
 

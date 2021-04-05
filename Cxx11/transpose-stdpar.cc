@@ -55,6 +55,7 @@
 #include <algorithm>
 #include <numeric>
 #include <execution>
+
 //#include <ranges>
 //#include <iterator>
 
@@ -122,6 +123,7 @@ int main(int argc, char * argv[])
 
     if (iter==1) trans_time = prk::wtime();
 
+#if 1
     double * const pA = A.data();
     double * const pB = B.data();
     std::for_each( std::execution::par_unseq,
@@ -132,6 +134,17 @@ int main(int argc, char * argv[])
         pB[i*order+j] += pA[j*order+i];
         pA[j*order+i] += 1.0;
     });
+#else
+    std::for_each( std::execution::par_unseq,
+                   std::begin(range), std::end(range), [&] (int i) {
+      std::for_each( //std::execution::par_unseq,
+                     //std::execution::unseq,
+                     std::begin(range), std::end(range), [&] (int j) {
+          B[i*order+j] += A[j*order+i];
+          A[j*order+i] += 1.0;
+      });
+    });
+#endif
   }
   trans_time = prk::wtime() - trans_time;
 
