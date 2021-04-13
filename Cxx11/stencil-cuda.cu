@@ -1,4 +1,3 @@
-
 ///
 /// Copyright (c) 2013, Intel Corporation
 ///
@@ -89,7 +88,7 @@ int main(int argc, char* argv[])
   std::cout << "C++11/CUDA Stencil execution on 2D grid" << std::endl;
 
   prk::CUDA::info info;
-  info.print();
+  info.print(1);
 
   //////////////////////////////////////////////////////////////////////
   // Process and test input parameters
