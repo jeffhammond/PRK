@@ -52,6 +52,10 @@
 !          Converted to Fortran by Jeff Hammond, January 2015
 ! *******************************************************************
 
+! works around AOMP bug in ROCM 4.0
+! 5-10% better with NVF
+#define NO_LOCAL_TILE 1
+
 program main
   use iso_fortran_env
   use omp_lib
@@ -65,7 +69,9 @@ program main
   integer(kind=INT32) ::  order                     ! order of a the matrix
   real(kind=REAL64), allocatable ::  A(:,:)         ! buffer to hold original matrix
   real(kind=REAL64), allocatable ::  B(:,:)         ! buffer to hold transposed matrix
+#ifndef NO_LOCAL_TILE
   real(kind=REAL64) ::  T(0:32,0:32)                ! Tile
+#endif
   integer(kind=INT64) ::  bytes                     ! combined size of matrices
   ! runtime variables
   integer(kind=INT32) ::  i, j, k
@@ -162,9 +168,14 @@ program main
     if (k.eq.1) t0 = omp_get_wtime()
 
     if (tile_size.lt.order) then
+#ifndef NO_LOCAL_TILE
       !$omp target teams distribute collapse(2) private(T)
+#else
+      !$omp target teams distribute collapse(2)
+#endif
       do jt=1,order,tile_size
         do it=1,order,tile_size
+#ifndef NO_LOCAL_TILE
           !$omp parallel do simd collapse(2) schedule(static,4)
           do j=0,tile_size-1
             do i=0,tile_size-1
@@ -173,10 +184,16 @@ program main
             enddo
           enddo
           !$omp end parallel do simd
+#endif
           !$omp parallel do simd collapse(2) schedule(static,4)
           do i=0,tile_size-1
             do j=0,tile_size-1
+#ifndef NO_LOCAL_TILE
               B(jt+j,it+i) = B(jt+j,it+i) + T(i,j)
+#else
+              B(jt+j,it+i) = B(jt+j,it+i) + A(it+i,jt+j)
+              A(it+i,jt+j) = A(it+i,jt+j) + 1
+#endif
             enddo
           enddo
           !$omp end parallel do simd
