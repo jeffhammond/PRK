@@ -1,5 +1,6 @@
 !
 ! Copyright (c) 2015, Intel Corporation
+! Copyright (c) 2021, NVIDIA
 !
 ! Redistribution and use in source and binary forms, with or without
 ! modification, are permitted provided that the following conditions
@@ -54,24 +55,27 @@
 !            Converted to Fortran by Jeff Hammond, January 2016.
 ! *******************************************************************
 
-subroutine sweep_tile(startm,endm,startn,endn,m,n,grid)
+module p2p_tasks
   use iso_fortran_env
-  implicit none
-  integer(kind=INT32), intent(in) :: m,n
-  integer(kind=INT32), intent(in) :: startm,endm
-  integer(kind=INT32), intent(in) :: startn,endn
-  real(kind=REAL64), intent(inout) ::  grid(m,n)
-  integer(kind=INT32) :: i,j
-  do j=startn,endn
-    do i=startm,endm
-      grid(i,j) = grid(i-1,j) + grid(i,j-1) - grid(i-1,j-1)
-    enddo
-  enddo
-end subroutine
+  contains
+    subroutine sweep_tile(startm,endm,startn,endn,m,n,grid)
+      implicit none
+      integer(kind=INT32), intent(in) :: m,n
+      integer(kind=INT32), intent(in) :: startm,endm
+      integer(kind=INT32), intent(in) :: startn,endn
+      real(kind=REAL64), intent(inout) ::  grid(m,n)
+      integer(kind=INT32) :: i,j
+      do j=startn,endn
+        do i=startm,endm
+          grid(i,j) = grid(i-1,j) + grid(i,j-1) - grid(i-1,j-1)
+        enddo
+      enddo
+    end subroutine
+end module p2p_tasks
 
 program main
-  use iso_fortran_env
   use omp_lib
+  use p2p_tasks
   implicit none
   ! for argument parsing
   integer :: err
