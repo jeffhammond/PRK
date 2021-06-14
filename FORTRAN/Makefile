@@ -138,6 +138,7 @@ dgemm-blas: dgemm-blas.F90
 
 clean:
 	-rm -f *.o
+	-rm -f *.mod
 	-rm -f *.i90
 	-rm -f *.dbg
 	-rm -f *__genmod.f90 # Intel Fortran
