@@ -113,7 +113,7 @@ case "$PRK_TARGET" in
         export PRK_TARGET_PATH=C1z
         case $CC in
             g*)
-                for major in "-9" "-8" "-7" "-6" "-5" "" ; do
+                for major in "-14" "-13" "-12" "-11" "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
                   if [ -f "`which ${CC}${major}`" ]; then
                       export PRK_CC="${CC}${major}"
                       echo "Found C: $PRK_CC"
@@ -125,7 +125,7 @@ case "$PRK_TARGET" in
                 fi
                 ;;
             clang*)
-                for version in "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
+                for version in "-14" "-13" "-12" "-11" "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
                   if [ -f "`which ${CC}${version}`" ]; then
                       export PRK_CC="${CC}${version}"
                       echo "Found C: $PRK_CC"
@@ -268,7 +268,7 @@ case "$PRK_TARGET" in
                 if [ "${TRAVIS_OS_NAME}" = "osx" ] && [ "x$PRK_CXX" = "x" ] ; then
                   brew list
                   brew search llvm
-                  for version in "9" "8" "7" "6" "5" ; do
+                  for version in "14" "13" "12" "11" "10" "9" "8" "7" "6" "5" ; do
                     if [ -f "`which /usr/local/opt/gcc@${version}/bin/g++-${version}`" ]; then
                         export PRK_CXX="`which /usr/local/opt/gcc@${version}/bin/g++-${version}`"
                         echo "Found C++: $PRK_CXX"
@@ -277,7 +277,7 @@ case "$PRK_TARGET" in
                   done
                 fi
                 if [ "x$PRK_CXX" = "x" ] ; then
-                  for major in "-9" "-8" "-7" "-6" "-5" "" ; do
+                  for major in "-14" "-13" "-12" "-11" "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
                     if [ -f "`which ${CXX}${major}`" ]; then
                         export PRK_CXX="${CXX}${major}"
                         echo "Found C++: $PRK_CXX"
@@ -301,7 +301,7 @@ case "$PRK_TARGET" in
                   done
                 fi
                 if [ "x$PRK_CXX" = "x" ] ; then
-                  for version in "-11" "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
+                  for version in "-14" "-13" "-12" "-11" "-10" "-9" "-8" "-7" "-6" "-5" ; do
                     if [ -f "`which ${CXX}${version}`" ]; then
                         export PRK_CXX="${CXX}${version}"
                         echo "Found C++: $PRK_CXX"
@@ -448,19 +448,20 @@ case "$PRK_TARGET" in
             echo "RANGEFLAG=-DUSE_BOOST_IRANGE -I/usr/local/include" >> common/make.defs
         fi
 
-        # C++11 with rangefor and Boost.Ranges
+        # C++11 with ranges and Boost.Ranges
         #if [ ! "${CC}" = "gcc" ] && [ ! "${TRAVIS_OS_NAME}" = "linux" ] ; then
-        ${MAKE} -C $PRK_TARGET_PATH rangefor
-        $PRK_TARGET_PATH/stencil-rangefor     10 1000
-        $PRK_TARGET_PATH/transpose-rangefor   10 1024 32
-        $PRK_TARGET_PATH/nstream-rangefor     10 16777216 32
+        if [ ! true ] ; then
+        ${MAKE} -C $PRK_TARGET_PATH ranges
+        $PRK_TARGET_PATH/stencil-ranges     10 1000
+        $PRK_TARGET_PATH/transpose-ranges   10 1024 32
+        $PRK_TARGET_PATH/nstream-ranges     10 16777216 32
         #echo "Test stencil code generator"
         for s in star grid ; do
             for r in 1 2 3 4 5 ; do
-                $PRK_TARGET_PATH/stencil-rangefor 10 200 20 $s $r
+                $PRK_TARGET_PATH/stencil-ranges 10 200 20 $s $r
             done
         done
-        #fi
+        fi
 
         # C++11 with TBB
         TBBROOT=${TRAVIS_ROOT}/tbb
@@ -656,7 +657,7 @@ case "$PRK_TARGET" in
         export PRK_TARGET_PATH=FORTRAN
         case "$CC" in
             gcc)
-                for major in "-12" "-11" "-10" "-9" "-8" "-7" "" ; do
+                for major in "-14" "-13" "-12" "-11" "-10" "-9" "-8" "-7" "-6" "-5" "" ; do
                     if [ -f "`which gfortran$major`" ]; then
                         export PRK_FC="gfortran$major"
                         echo "Found GCC Fortran: $PRK_FC"
