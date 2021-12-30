@@ -1,5 +1,6 @@
 ///
 /// Copyright (c) 2020, Intel Corporation
+/// Copyright (c) 2021, NVIDIA
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -68,6 +69,7 @@
 #include "boost/tuple/tuple.hpp"
 #include "boost/tuple/tuple_comparison.hpp"
 #endif
+#include <ranges>
 
 int main(int argc, char * argv[])
 {
@@ -113,7 +115,7 @@ int main(int argc, char * argv[])
   std::vector<double> B(length);
   std::vector<double> C(length);
 
-  //auto range = prk::range(static_cast<size_t>(0), length);
+  auto range = std::ranges::views::iota(static_cast<decltype(length)>(0), length);
 
   double scalar(3);
 
@@ -128,6 +130,10 @@ int main(int argc, char * argv[])
       if (iter==1) nstream_time = prk::wtime();
 
 #if 1
+      std::for_each( std::begin(range), std::end(range), [&] (size_t i) {
+          A[i] += B[i] + scalar * C[i];
+      });
+#elif 0
       // stupid version
       std::transform( std::begin(A), std::end(A), std::begin(B), std::begin(A),
                       [](auto&& x, auto&& y) {
