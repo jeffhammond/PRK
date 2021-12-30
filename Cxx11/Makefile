@@ -82,13 +82,13 @@ vector: p2p-vector p2p-hyperplane-vector stencil-vector transpose-vector nstream
 
 valarray: transpose-valarray nstream-valarray
 
-openmp: p2p-hyperplane-openmp p2p-tasks-openmp stencil-openmp transpose-openmp nstream-openmp
+openmp: p2p-hyperplane-openmp stencil-openmp transpose-openmp nstream-openmp p2p-tasks-openmp
 
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
 
 taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
 
-mpi: nstream-mpi stencil-mpi
+mpi: nstream-mpi stencil-mpi dgemm-mpi-cblas
 
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
@@ -155,10 +155,10 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 #	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
 
 %-mpi: %-mpi.cc prk_util.h prk_mpi.h
-	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+	$(MPICXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
 
-%-mpi: %-mpi.cc prk_util.h prk_mpi.h
-	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+%-mpi-cblas: %-mpi-cblas.cc prk_util.h prk_mpi.h
+	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) $(CBLASFLAGS) -o $@
 
 %-opencl: %-opencl.cc prk_util.h prk_opencl.h
 	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
