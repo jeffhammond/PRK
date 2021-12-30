@@ -126,7 +126,7 @@ void run(sycl::queue & q, int iterations, size_t length, size_t block_size)
 #if PREBUILD_KERNEL
                 kernel.get_kernel<nstream2<T>>(),
 #endif
-		sycl::nd_range{global, local}, [=](sycl::nd_item<1> it) {
+		sycl::nd_range<1>{global, local}, [=](sycl::nd_item<1> it) {
 		const size_t i = it.get_global_id(0);
                 if (i < length) {
                     A[i] += B[i] + scalar * C[i];
@@ -137,7 +137,7 @@ void run(sycl::queue & q, int iterations, size_t length, size_t block_size)
 #if PREBUILD_KERNEL
                 kernel.get_kernel<nstream3<T>>(),
 #endif
-		sycl::nd_range{global, local}, [=](sycl::nd_item<1> it) {
+		sycl::nd_range<1>{global, local}, [=](sycl::nd_item<1> it) {
 		const size_t i = it.get_global_id(0);
                 A[i] += B[i] + scalar * C[i];
             });
@@ -287,6 +287,9 @@ int main(int argc, char * argv[])
     sycl::queue q{sycl::gpu_selector{}};
     prk::SYCL::print_device_platform(q);
     bool has_fp64 = prk::SYCL::has_fp64(q);
+    if (has_fp64) {
+      if (prk::SYCL::print_gen12lp_helper(q)) return 1;
+    }
     run<float>(q, iterations, length, block_size);
     if (has_fp64) {
       run<double>(q, iterations, length, block_size);
