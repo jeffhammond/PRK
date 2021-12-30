@@ -1,5 +1,5 @@
 ///
-/// Copyright (c) 2017, Intel Corporation
+/// Copyright (c) 2020, Intel Corporation
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -39,10 +39,10 @@
 ///          a third vector.
 ///
 /// USAGE:   The program takes as input the number
-///          of iterations to loop over the triad vectors, the length of the
-///          vectors, and the offset between vectors
+///          of iterations to loop over the triad vectors and
+///          the length of the vectors.
 ///
-///          <progname> <# iterations> <vector length> <offset>
+///          <progname> <# iterations> <vector length>
 ///
 ///          The output consists of diagnostics to make sure the
 ///          algorithm worked, and of timing statistics.
@@ -68,8 +68,9 @@ template <typename T>
 void run(cl::Context context, int iterations, size_t length)
 {
   auto precision = (sizeof(T)==8) ? 64 : 32;
+  auto kfile = "nstream"+std::to_string(precision)+".cl";
 
-  cl::Program program(context, prk::opencl::loadProgram("nstream.cl"), true);
+  cl::Program program(context, prk::opencl::loadProgram(kfile), true);
 
   auto function = (precision==64) ? "nstream64" : "nstream32";
 
@@ -157,10 +158,11 @@ int main(int argc, char* argv[])
   /// Read and test input parameters
   //////////////////////////////////////////////////////////////////////
 
-  int iterations, offset, length;
+  int iterations;
+  size_t length;
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <vector length> [<offset>]";
+        throw "Usage: <# iterations> <vector length>";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -168,14 +170,9 @@ int main(int argc, char* argv[])
         throw "ERROR: iterations must be >= 1";
       }
 
-      length = std::atoi(argv[2]);
+      length = std::atol(argv[2]);
       if (length <= 0) {
         throw "ERROR: vector length must be positive";
-      }
-
-      offset = (argc>3) ? std::atoi(argv[3]) : 0;
-      if (length <= 0) {
-        throw "ERROR: offset must be nonnegative";
       }
   }
   catch (const char * e) {
@@ -185,60 +182,29 @@ int main(int argc, char* argv[])
 
   std::cout << "Number of iterations = " << iterations << std::endl;
   std::cout << "Vector length        = " << length << std::endl;
-  std::cout << "Offset               = " << offset << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   /// Setup OpenCL environment
   //////////////////////////////////////////////////////////////////////
 
-  prk::opencl::listPlatforms();
-
-  cl_int err = CL_SUCCESS;
-
-  cl::Context cpu(CL_DEVICE_TYPE_CPU, NULL, NULL, NULL, &err);
-  if ( err == CL_SUCCESS && prk::opencl::available(cpu) )
-  {
-    const int precision = prk::opencl::precision(cpu);
-
-    std::cout << "CPU Precision        = " << precision << "-bit" << std::endl;
-
-    if (precision==64) {
-        run<double>(cpu, iterations, length);
-    }
-    run<float>(cpu, iterations, length);
-  } else {
-    std::cerr << "No CPU" << std::endl;
-  }
-
-  cl::Context gpu(CL_DEVICE_TYPE_GPU, NULL, NULL, NULL, &err);
-  if ( err == CL_SUCCESS && prk::opencl::available(gpu) )
-  {
-    const int precision = prk::opencl::precision(gpu);
-
-    std::cout << "GPU Precision        = " << precision << "-bit" << std::endl;
-
-    if (precision==64) {
-        run<double>(gpu, iterations, length);
-    }
-    run<float>(gpu, iterations, length);
-  } else {
-    std::cerr << "No GPU" << std::endl;
-  }
-
-  cl::Context acc(CL_DEVICE_TYPE_ACCELERATOR, NULL, NULL, NULL, &err);
-  if ( err == CL_SUCCESS && prk::opencl::available(acc) )
-  {
-
-    const int precision = prk::opencl::precision(acc);
-
-    std::cout << "ACC Precision        = " << precision << "-bit" << std::endl;
-
-    if (precision==64) {
-        run<double>(acc, iterations, length);
-    }
-    run<float>(acc, iterations, length);
-  } else {
-    std::cerr << "No ACC" << std::endl;
+  std::vector<cl::Platform> platforms;
+  cl::Platform::get(&platforms);
+  for (auto i : platforms) {
+      std::vector<cl::Device> devices;
+      i.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+      for (auto j : devices) {
+          auto t = j.getInfo<CL_DEVICE_TYPE>();
+          if (t == CL_DEVICE_TYPE_CPU || t == CL_DEVICE_TYPE_GPU) {
+              std::cout << "\n" << "CL_DEVICE_NAME=" << j.getInfo<CL_DEVICE_NAME>() << "\n";
+              auto e = j.getInfo<CL_DEVICE_EXTENSIONS>();
+              auto has64 = prk::stringContains(e,"cl_khr_fp64");
+              cl::Context ctx(j);
+              run<float>(ctx, iterations, length);
+              if (has64) {
+                  run<double>(ctx, iterations, length);
+              }
+          }
+      }
   }
 
   return 0;
