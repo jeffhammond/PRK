@@ -82,13 +82,13 @@ vector: p2p-vector p2p-hyperplane-vector stencil-vector transpose-vector nstream
 
 valarray: transpose-valarray nstream-valarray
 
-openmp: p2p-hyperplane-openmp p2p-tasks-openmp stencil-openmp transpose-openmp nstream-openmp
+openmp: p2p-hyperplane-openmp stencil-openmp transpose-openmp nstream-openmp p2p-tasks-openmp
 
 target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
 
 taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
 
-mpi: nstream-mpi stencil-mpi
+mpi: nstream-mpi stencil-mpi dgemm-mpi-cblas
 
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
@@ -155,10 +155,10 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 #	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
 
 %-mpi: %-mpi.cc prk_util.h prk_mpi.h
-	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+	$(MPICXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
 
-%-mpi: %-mpi.cc prk_util.h prk_mpi.h
-	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+%-mpi-cblas: %-mpi-cblas.cc prk_util.h prk_mpi.h
+	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) $(CBLASFLAGS) -o $@
 
 %-opencl: %-opencl.cc prk_util.h prk_opencl.h
 	$(CXX) $(CXXFLAGS) $< $(OPENCLFLAGS) -o $@
@@ -232,7 +232,7 @@ pic-sycl: pic-sycl.cc prk_util.h prk_sycl.h random_draw.c
 
 ifeq ($(PRK_KOKKOS_BACKEND),Cuda)
 %-kokkos: %-kokkos.cc prk_util.h prk_kokkos.h
-	${KOKKOSDIR}/bin/nvcc_wrapper $(CPPFLAGS) $(CUDAFLAGS) $< $(KOKKOSFLAG) -DPRK_KOKKOS_BACKEND=Cuda -o $@
+	$(NVCC) -x cu $(CPPFLAGS) $(CUDAFLAGS) $< $(KOKKOSFLAG) -DPRK_KOKKOS_BACKEND=Cuda -o $@
 else
 %-kokkos: %-kokkos.cc prk_util.h prk_kokkos.h
 	$(info PRK help: Set USE_PRK_KOKKOS_BACKEND={Threads,Serial,Cuda} when invoking make to not use OpenMP)
@@ -251,10 +251,10 @@ endif
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $< -o $@
 
 %-mpi-cublas: %-mpi-cublas.cu prk_util.h prk_cuda.h prk_mpi.h
-	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) -DPRK_USE_CUBLAS $< -lcublas $(MPILIB) -o $@
+	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) -DPRK_USE_CUBLAS $< -lcublas -lcublasLt $(MPILIB) -o $@
 
 %-cublas: %-cublas.cu prk_util.h prk_cuda.h
-	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) -DPRK_USE_CUBLAS $< -lcublas -o $@
+	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) -DPRK_USE_CUBLAS $< -lcublas -lcublasLt -o $@
 
 %-hip: %-hip.cc prk_util.h prk_hip.h
 	$(HIPCC) $(HIPFLAGS) $(CPPFLAGS) $< -o $@
