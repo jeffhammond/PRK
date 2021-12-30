@@ -1,9 +1,9 @@
 // based on Java version
 object p2p
 {
-    def main(args: Array[String]) {
+    def main(args: Array[String]) : Unit = {
         println("Parallel Research Kernels.")
-        println("Java pipeline execution on 2D grid.")
+        println("Scala pipeline execution on 2D grid.")
 
         /*******************************************************************
         **read and test input parameters
