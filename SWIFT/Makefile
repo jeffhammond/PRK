@@ -1,7 +1,7 @@
 SWIFT 	= swiftc
 #SWFLAGS	= -target x86_64-apple-macosx10.11
 
-all: hello vector
+all: hello vector nstream
 
 %: %.swift
 	$(SWIFT) $(SWFLAGS) $< -o $@
@@ -9,3 +9,4 @@ all: hello vector
 clean:
 	-rm -f hello
 	-rm -f vector
+	-rm -f nstream
