@@ -1,5 +1,6 @@
 ///
 /// Copyright (c) 2018, Intel Corporation
+/// Copyright (c) 2022, NVIDIA
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -93,6 +94,99 @@ void prk_dgemm_loops(const int order,
     }
 }
 #endif
+
+// SGEMM
+
+void prk_sgemm(const int order,
+               const std::vector<float> & A,
+               const std::vector<float> & B,
+                     std::vector<float> & C)
+{
+    const int n = order;
+    const float alpha = 1.0;
+    const float beta  = 1.0;
+
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                n, n, n, alpha, A.data(), n, B.data(), n, beta, C.data(), n);
+}
+
+void prk_sgemm(const int order, const int batches,
+               const std::vector<std::vector<float>> & A,
+               const std::vector<std::vector<float>> & B,
+                     std::vector<std::vector<float>> & C)
+{
+    const int n = order;
+    const float alpha = 1.0;
+    const float beta  = 1.0;
+
+    for (int b=0; b<batches; ++b) {
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                    n, n, n, alpha, &(A[b][0]), n, &(B[b][0]), n, beta, &(C[b][0]), n);
+    }
+}
+
+void prk_sgemm(const int order, const int batches, const int nt,
+               const std::vector<std::vector<float>> & A,
+               const std::vector<std::vector<float>> & B,
+                     std::vector<std::vector<float>> & C)
+{
+    const int n = order;
+    const float alpha = 1.0;
+    const float beta  = 1.0;
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic) num_threads(nt)
+#endif
+    for (int b=0; b<batches; ++b) {
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                    n, n, n, alpha, A[b].data(), n, B[b].data(), n, beta, C[b].data(), n);
+    }
+}
+
+void prk_sgemm(const int order, const int batches,
+               float** & A,
+               float** & B,
+               float** & C)
+{
+    const int n = order;
+    const float alpha = 1.0;
+    const float beta  = 1.0;
+
+    const int group_count = 1;
+    PRK_UNUSED const int group_size[group_count] = { batches };
+
+    const CBLAS_TRANSPOSE transa_array[group_count] = { CblasNoTrans };
+    const CBLAS_TRANSPOSE transb_array[group_count] = { CblasNoTrans };
+
+    const int n_array[group_count] = { n };
+
+    const float alpha_array[group_count] = { alpha };
+    const float beta_array[group_count]  = { beta };
+
+#ifdef MKL
+    cblas_sgemm_batch(CblasRowMajor, transa_array, transb_array,
+                      n_array, n_array, n_array,
+                      alpha_array,
+                      (const float**) A, n_array,
+                      (const float**) B, n_array,
+                      beta_array,
+                      C, n_array,
+                      group_count, group_size);
+#else // e.g. Accelerate does not have batched BLAS
+    for (int b=0; b<batches; ++b) {
+        cblas_sgemm(CblasRowMajor,
+                    transa_array[0], transb_array[0],
+                    n_array[0], n_array[0], n_array[0],
+                    alpha_array[0],
+                    A[b], n_array[0],
+                    B[b], n_array[0],
+                    beta_array[0],
+                    C[b], n_array[0]);
+    }
+#endif
+}
+
+// DGEMM
 
 void prk_dgemm(const int order,
                const std::vector<double> & A,
@@ -196,9 +290,10 @@ int main(int argc, char * argv[])
   int order;
   int batches = 0;
   int batch_threads = 1;
+  bool fp32{false};
   try {
       if (argc < 3) {
-        throw "Usage: <# iterations> <matrix order> [<batches> <batch threads>]";
+        throw "Usage: <# iterations> <matrix order> [<batches> <batch threads> <FP32>]";
       }
 
       iterations  = std::atoi(argv[1]);
@@ -224,6 +319,10 @@ int main(int argc, char * argv[])
         batch_threads = omp_get_max_threads();
 #endif
       }
+
+      if (argc > 5) {
+        fp32 = (0==std::atoi(argv[5]) ? false : true);
+      }
   }
   catch (const char * e) {
     std::cout << e << std::endl;
@@ -247,53 +346,113 @@ int main(int argc, char * argv[])
           std::cout << "Batch size           = " << std::abs(batches) << " (loop over legacy BLAS sequentially)" << std::endl;
       }
   }
+  std::cout << "Precision            = " << (fp32 ? "FP32" : "FP64") << std::endl;
 
   //////////////////////////////////////////////////////////////////////
   // Allocate space for matrices
   //////////////////////////////////////////////////////////////////////
 
-  double dgemm_time{0};
+  double gemm_time{0};
 
   const int matrices = (batches==0 ? 1 : abs(batches));
 
-  std::vector<double> const M(order*order,0);
-  std::vector<std::vector<double>> A(matrices,M);
-  std::vector<std::vector<double>> B(matrices,M);
-  std::vector<std::vector<double>> C(matrices,M);
-  for (int b=0; b<matrices; ++b) {
-    for (int i=0; i<order; ++i) {
-      for (int j=0; j<order; ++j) {
-         A[b][i*order+j] = i;
-         B[b][i*order+j] = i;
-         C[b][i*order+j] = 0;
+  double residuum(0);
+  const double forder = static_cast<double>(order);
+  const double reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
+
+  if (fp32) {
+      std::vector<float> const M(order*order,0);
+      std::vector<std::vector<float>> A(matrices,M);
+      std::vector<std::vector<float>> B(matrices,M);
+      std::vector<std::vector<float>> C(matrices,M);
+      for (int b=0; b<matrices; ++b) {
+        for (int i=0; i<order; ++i) {
+          for (int j=0; j<order; ++j) {
+            A[b][i*order+j] = i;
+            B[b][i*order+j] = i;
+            C[b][i*order+j] = 0;
+          }
+        }
       }
-    }
-  }
 
-  double ** pA = new double*[matrices];
-  double ** pB = new double*[matrices];
-  double ** pC = new double*[matrices];
+      float ** pA = new float*[matrices];
+      float ** pB = new float*[matrices];
+      float ** pC = new float*[matrices];
 
-  for (int b=0; b<matrices; ++b) {
-     pA[b] = A[b].data();
-     pB[b] = B[b].data();
-     pC[b] = C[b].data();
-  }
-
-  {
-    for (int iter = 0; iter<=iterations; iter++) {
-
-      if (iter==1) dgemm_time = prk::wtime();
-
-      if (batches == 0) {
-          prk_dgemm(order, A[0], B[0], C[0]);
-      } else if (batches < 0) {
-          prk_dgemm(order, matrices, batch_threads, A, B, C);
-      } else if (batches > 0) {
-          prk_dgemm(order, matrices, pA, pB, pC);
+      for (int b=0; b<matrices; ++b) {
+         pA[b] = A[b].data();
+         pB[b] = B[b].data();
+         pC[b] = C[b].data();
       }
-    }
-    dgemm_time = prk::wtime() - dgemm_time;
+
+      {
+        for (int iter = 0; iter<=iterations; iter++) {
+
+          if (iter==1) gemm_time = prk::wtime();
+
+          if (batches == 0) {
+            prk_sgemm(order, A[0], B[0], C[0]);
+          } else if (batches < 0) {
+            prk_sgemm(order, matrices, batch_threads, A, B, C);
+          } else if (batches > 0) {
+            prk_sgemm(order, matrices, pA, pB, pC);
+          }
+        }
+        gemm_time = prk::wtime() - gemm_time;
+      }
+
+      for (int b=0; b<matrices; ++b) {
+          const auto checksum = prk::reduce(C[b].begin(), C[b].end(), 0.0);
+          residuum += std::abs(checksum - reference) / reference;
+      }
+      residuum /= matrices;
+
+  } else {
+      std::vector<double> const M(order*order,0);
+      std::vector<std::vector<double>> A(matrices,M);
+      std::vector<std::vector<double>> B(matrices,M);
+      std::vector<std::vector<double>> C(matrices,M);
+      for (int b=0; b<matrices; ++b) {
+        for (int i=0; i<order; ++i) {
+          for (int j=0; j<order; ++j) {
+            A[b][i*order+j] = i;
+            B[b][i*order+j] = i;
+            C[b][i*order+j] = 0;
+          }
+        }
+      }
+
+      double ** pA = new double*[matrices];
+      double ** pB = new double*[matrices];
+      double ** pC = new double*[matrices];
+
+      for (int b=0; b<matrices; ++b) {
+         pA[b] = A[b].data();
+         pB[b] = B[b].data();
+         pC[b] = C[b].data();
+      }
+
+      {
+        for (int iter = 0; iter<=iterations; iter++) {
+
+          if (iter==1) gemm_time = prk::wtime();
+
+          if (batches == 0) {
+            prk_dgemm(order, A[0], B[0], C[0]);
+          } else if (batches < 0) {
+            prk_dgemm(order, matrices, batch_threads, A, B, C);
+          } else if (batches > 0) {
+            prk_dgemm(order, matrices, pA, pB, pC);
+          }
+        }
+        gemm_time = prk::wtime() - gemm_time;
+      }
+
+      for (int b=0; b<matrices; ++b) {
+          const auto checksum = prk::reduce(C[b].begin(), C[b].end(), 0.0);
+          residuum += std::abs(checksum - reference) / reference;
+      }
+      residuum /= matrices;
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -301,22 +460,13 @@ int main(int argc, char * argv[])
   //////////////////////////////////////////////////////////////////////
 
   const double epsilon = 1.0e-8;
-  const double forder = static_cast<double>(order);
-  const double reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
-  double residuum(0);
-  for (int b=0; b<matrices; ++b) {
-      const auto checksum = prk::reduce(C[b].begin(), C[b].end(), 0.0);
-      residuum += std::abs(checksum - reference) / reference;
-  }
-  residuum /= matrices;
-
   if (residuum < epsilon) {
 #if VERBOSE
     std::cout << "Reference checksum = " << reference << "\n"
               << "Actual checksum = " << checksum << std::endl;
 #endif
     std::cout << "Solution validates" << std::endl;
-    auto avgtime = dgemm_time/iterations/matrices;
+    auto avgtime = gemm_time/iterations/matrices;
     auto nflops = 2.0 * prk::pow(forder,3);
     std::cout << "Rate (MF/s): " << 1.0e-6 * nflops/avgtime
               << " Avg time (s): " << avgtime << std::endl;
