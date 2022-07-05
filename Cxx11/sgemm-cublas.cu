@@ -94,8 +94,8 @@ __global__ void init(int order, const int matrices, float * A, float * B, float 
 
     for (int b=0; b<matrices; ++b) {
       if ((i<order) && (j<order)) {
-        A[b*order*order+i*order+j] = i;
-        B[b*order*order+i*order+j] = i;
+        A[b*order*order+i*order+j] = i*1e-3;
+        B[b*order*order+i*order+j] = i*1e-3;
         C[b*order*order+i*order+j] = 0;
       }
     }
@@ -268,8 +268,8 @@ int main(int argc, char * argv[])
   if (input_copy) {
     for (int i=0; i<order; ++i) {
       for (int j=0; j<order; ++j) {
-         h_a[i*order+j] = i;
-         h_b[i*order+j] = i;
+         h_a[i*order+j] = i*1e-3;
+         h_b[i*order+j] = i*1e-3;
       }
     }
 
@@ -347,13 +347,13 @@ int main(int argc, char * argv[])
   if(tf32) {
     epsilon = 1.0e-4;
   } else {
-    epsilon = 1.0e-8;
+    epsilon = 1.0e-7;
   }
-  const auto forder = static_cast<double>(order);
-  const auto reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
+  const double forder = static_cast<double>(order);
+  const double reference = 0.25e-6 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
   double residuum(0);
   for (int b=0; b<matrices; ++b) {
-      const auto checksum = prk::reduce( &(h_c[b*order*order+0]), &(h_c[b*order*order+nelems]), 0.0);
+      const auto checksum = prk::reduce<float*,double>( &(h_c[b*order*order+0]), &(h_c[b*order*order+nelems]), 0.0);
       residuum += std::abs(checksum-reference)/reference;
   }
   residuum /= matrices;
@@ -361,7 +361,7 @@ int main(int argc, char * argv[])
   if (residuum < epsilon) {
 #if VERBOSE
     std::cout << "Reference checksum = " << reference << "\n"
-              << "Actual checksum = " << checksum << std::endl;
+              << "Residuum           = " << residuum << std::endl;
 #endif
     std::cout << "Solution validates" << std::endl;
     auto avgtime = gemm_time/iterations/matrices;
