@@ -146,7 +146,6 @@ program main
     !$omp task  firstprivate(order,tile_size,jt) shared(A,B) private(i,j,it)
     do it=1,order,tile_size
       do j=jt,min(order,jt+tile_size-1)
-        !$omp simd
         do i=it,min(order,it+tile_size-1)
             A(i,j) = real(order,REAL64) * real(j-1,REAL64) + real(i-1,REAL64)
             B(i,j) = 0.0
@@ -168,7 +167,6 @@ program main
       !$omp task  firstprivate(order,tile_size,jt) shared(A,B) private(i,j,it)
       do it=1,order,tile_size
         do j=jt,min(order,jt+tile_size-1)
-          !$omp simd
           do i=it,min(order,it+tile_size-1)
             B(j,i) = B(j,i) + A(i,j)
             A(i,j) = A(i,j) + 1.0

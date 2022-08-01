@@ -59,9 +59,11 @@
 #elif defined(ACCELERATE)
 // The location of cblas.h is not in the system include path when -framework Accelerate is provided.
 #include <Accelerate/Accelerate.h>
-#else
-#include <cblas.h>
+#elif defined(LAPACKE)
+#include <lapacke.h>
+#include <lapacke_utils.h>
 #endif
+#include <cblas.h>
 
 int main(int argc, char * argv[])
 {
@@ -123,6 +125,8 @@ int main(int argc, char * argv[])
       mkl_domatcopy('R','T', order, order, 1.0, &(A[0]), order, &(T[0]), order);
 #elif defined(ACCELERATE)
       vDSP_mtransD(&(A[0]), 1, &(T[0]), 1, order, order);
+#elif defined(LAPACKE)
+      LAPACKE_dge_trans(LAPACK_ROW_MAJOR, order, order, &(A[0]), order, &(T[0]), order);
 #else
 #warning No CBLAS transpose extension available!
       for (int i=0;i<order; i++) {

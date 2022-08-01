@@ -1,7 +1,7 @@
 include ../common/Cxx11.defs
 include ../common/PRKVERSION
 
-CPPFLAGS  = -DPRKVERSION=$(PRKVERSION)
+CPPFLAGS  = -DPRKVERSION=$(PRKVERSION) -g
 
 # debugging
 ifdef VERBOSE
