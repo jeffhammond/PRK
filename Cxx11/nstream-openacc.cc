@@ -105,15 +105,29 @@ int main(int argc, char * argv[])
 
   double nstream_time{0};
 
+#if 0
   size_t bytes = length*sizeof(double);
   double * RESTRICT A = (double *) acc_malloc(bytes);
   double * RESTRICT B = (double *) acc_malloc(bytes);
   double * RESTRICT C = (double *) acc_malloc(bytes);
+#else
+  double * RESTRICT A = new double[length];
+  double * RESTRICT B = new double[length];
+  double * RESTRICT C = new double[length];
+#endif
 
   double scalar = 3.0;
 
+#if 1
+  #pragma acc enter data create(A[0:length],B[0:length],C[0:length])
+#endif
+
   {
+#if 0
     #pragma acc parallel loop deviceptr(A,B,C)
+#else
+    #pragma acc parallel loop
+#endif
     for (size_t i=0; i<length; i++) {
       A[i] = 0.0;
       B[i] = 2.0;
@@ -124,7 +138,11 @@ int main(int argc, char * argv[])
 
       if (iter==1) nstream_time = prk::wtime();
 
+#if 0
       #pragma acc parallel loop deviceptr(A,B,C)
+#else
+      #pragma acc parallel loop
+#endif
       for (size_t i=0; i<length; i++) {
           A[i] += B[i] + scalar * C[i];
       }
@@ -146,14 +164,28 @@ int main(int argc, char * argv[])
   ar *= length;
 
   double asum(0);
+#if 0
   #pragma acc parallel loop reduction( +:asum ) deviceptr(A)
+#else
+  #pragma acc parallel loop reduction( +:asum )
+#endif
   for (size_t i=0; i<length; i++) {
       asum += prk::abs(A[i]);
   }
 
+#if 1
+  #pragma acc exit data delete(A,B,C)
+#endif
+
+#if 0
   acc_free(A);
   acc_free(B);
   acc_free(C);
+#else
+  delete [] A;
+  delete [] B;
+  delete [] C;
+#endif
 
   double epsilon=1.e-8;
   if (prk::abs(ar-asum)/asum > epsilon) {
