@@ -143,12 +143,14 @@ program main
     write(*,'(a,i3)') 'allocation  returned ',err
     stop 1
   endif
-  
+
+  call MPI_Barrier(MPI_COMM_WORLD)
   ! Fill the original matrix
   do concurrent (i=1:order, j=1:block_order)
     A(j,i) = me * block_order + (i-1)*order + (j-1)
   end do
   B = 0
+  call MPI_Barrier(MPI_COMM_WORLD)
 
   t0 = 0.0d0
 
@@ -159,6 +161,7 @@ program main
         t0 = MPI_Wtime()
     endif
 
+    call MPI_Barrier(MPI_COMM_WORLD)
     ! B += A^T
     do q=0,np-1
         recv_from = mod( (me + q     ), np)
@@ -173,9 +176,8 @@ program main
         lo = block_order * recv_from + 1
         hi = block_order * (recv_from+1)
         B(:,lo:hi) = B(:,lo:hi) + transpose(T)
-
-
     end do
+    call MPI_Barrier(MPI_COMM_WORLD)
     ! A += 1
     A = A + one
 
@@ -192,14 +194,16 @@ program main
   ! ** Analyze and output results.
   ! ********************************************************************
 
-  abserr = 0.0;
-  addit = (0.5*iterations) * (iterations+1.0)
+  abserr = 0
+  addit = (0.5*iterations) * (iterations+1)
   do j=1,block_order
     do i=1,order
       temp =  (order*(me*block_order+j-1)+(i-1)) * (iterations+1)+addit
       abserr = abserr + abs(B(j,i) - temp)
+      if (abs(B(j,i) - temp).gt.1e-2) print*,me,i,j,B(j,i),temp
     enddo
   enddo
+  print*,me,abserr
   call MPI_Allreduce(MPI_IN_PLACE,abserr,1,MPI_DOUBLE_PRECISION, &
                      MPI_SUM,MPI_COMM_WORLD)
 
