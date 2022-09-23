@@ -33,8 +33,6 @@
 #ifndef PRK_PSTL_H
 #define PRK_PSTL_H
 
-#include <ranges>
-
 #if defined(__GNUC__) && (__GNUC__ >= 9)
 
 # include <execution>

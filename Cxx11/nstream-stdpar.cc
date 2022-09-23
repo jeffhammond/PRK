@@ -119,9 +119,9 @@ int main(int argc, char * argv[])
   double scalar(3);
 
   {
-    std::fill( std::begin(A), std::end(A), 0.0 );
-    std::fill( std::begin(B), std::end(B), 2.0 );
-    std::fill( std::begin(C), std::end(C), 2.0 );
+    std::fill( exec::par_unseq, std::begin(A), std::end(A), 0.0 );
+    std::fill( exec::par_unseq, std::begin(B), std::end(B), 2.0 );
+    std::fill( exec::par_unseq, std::begin(C), std::end(C), 2.0 );
 
     for (int iter = 0; iter<=iterations; iter++) {
 
