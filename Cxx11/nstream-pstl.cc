@@ -109,9 +109,9 @@ int main(int argc, char * argv[])
 
   double nstream_time{0};
 
-  auto A = new std::vector<double>(length);
-  auto B = new std::vector<double>(length);
-  auto C = new std::vector<double>(length);
+  std::vector<double> A(length);
+  std::vector<double> B(length);
+  std::vector<double> C(length);
 
   //auto range = std::ranges::views::iota(static_cast<decltype(length)>(0), length);
   //auto begin = std::begin(range);
@@ -122,32 +122,17 @@ int main(int argc, char * argv[])
   double scalar(3);
 
   {
-    std::fill( exec::par_unseq, std::begin(*A), std::end(*A), 0.0 );
-    std::fill( exec::par_unseq, std::begin(*B), std::end(*B), 2.0 );
-    std::fill( exec::par_unseq, std::begin(*C), std::end(*C), 2.0 );
+    std::fill( exec::par_unseq, std::begin(A), std::end(A), 0.0 );
+    std::fill( exec::par_unseq, std::begin(B), std::end(B), 2.0 );
+    std::fill( exec::par_unseq, std::begin(C), std::end(C), 2.0 );
 
     for (int iter = 0; iter<=iterations; iter++) {
 
       if (iter==1) nstream_time = prk::wtime();
 
-#if 0
-      std::transform( exec::par_unseq,
-                      std::begin(A), std::end(A), std::begin(B), std::begin(A),
-                      [](auto&& x, auto&& y) {
-                           return x + y; // A[i] += B[i]
-                      }
-      );
-      std::transform( exec::par_unseq,
-                      std::begin(A), std::end(A), std::begin(C), std::begin(A),
-                      [scalar](auto&& x, auto&& y) {
-                           return x + scalar * y; // A[i] += scalar * C[i]
-                      }
-      );
-#else
-      std::for_each( exec::par_unseq, begin, end, [=] (size_t i) {
-          (*A)[i] += (*B)[i] + scalar * (*C)[i];
+      std::for_each( exec::par_unseq, begin, end, [=,&A,&B,&C] (size_t i) {
+          A[i] += B[i] + scalar * C[i];
       });
-#endif
     }
     nstream_time = prk::wtime() - nstream_time;
   }
@@ -165,18 +150,10 @@ int main(int argc, char * argv[])
 
   ar *= length;
 
-#if 0
   double asum(0);
   for (size_t i=0; i<length; i++) {
-      asum += prk::abs((*A)[i]);
+      asum += prk::abs(A[i]);
   }
-#else
-  double asum = std::transform_reduce( exec::par_unseq,
-                                       std::begin(*A), std::end(*A),
-                                       0.0,
-                                       std::plus<double>(),
-                                       [=] (double x) -> double { return std::fabs(x); });
-#endif
 
   double epsilon(1.e-8);
   if (prk::abs(ar-asum)/asum > epsilon) {
