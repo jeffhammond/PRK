@@ -99,7 +99,7 @@ prk.mod prk_mod.o: prk_mod.F90
 	$(FC) $(FCFLAGS) -c $< -o prk_mod.o
 
 prk_mpi.mod prk_mpi_mod.o: prk_mpi.F90
-	$(MPIFORT) $(FCFLAGS) -c $< -o prk_mpi_mod.o
+	$(MPIFORT) $(FCFLAGS) $(MPIINC) -c $< -o prk_mpi_mod.o
 
 stencil: stencil.F90 prk.mod
 	$(FC) $(FCFLAGS) -c stencil_serial.F90
@@ -124,10 +124,10 @@ dgemm-blas: dgemm-blas.F90 prk.mod
 	$(MPIFORT) $(FCFLAGS) $< prk_mod.o $(GAFLAG) -o $@
 
 %-mpi-openmp: %-mpi.F90 prk.mod
-	$(MPIFORT) $(FCFLAGS) $(OPENMPFLAG) $< prk_mod.o prk_mpi_mod.o -o $@
+	$(MPIFORT) $(FCFLAGS) $(OPENMPFLAG) $(MPIINC) $< prk_mod.o prk_mpi_mod.o $(MPILIB) -o $@
 
 %-mpi: %-mpi.F90 prk.mod prk_mpi.mod
-	$(MPIFORT) $(FCFLAGS) $< prk_mod.o prk_mpi_mod.o -o $@
+	$(MPIFORT) $(FCFLAGS) $(MPIINC) $< prk_mod.o prk_mpi_mod.o $(MPILIB) -o $@
 
 %-coarray: %-coarray.F90 prk.mod
 	$(CAFC) $(FCFLAGS) $< prk_mod.o $(COARRAYFLAG) -o $@

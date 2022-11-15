@@ -301,12 +301,20 @@ int main(int argc, char * argv[])
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  const double epsilon = 1.0e-8;
-  const double forder = static_cast<float>(order);
+  const double epsilon = 1.0e-5;
+  const double forder = static_cast<double>(order);
   const double reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
   double residuum(0);
   for (int b=0; b<matrices; ++b) {
-      const auto checksum = prk::reduce(C[b].begin(), C[b].end(), 0.0);
+#if 0
+      double checksum(0);
+      for (size_t i=0; i<order*order; i++) {
+          checksum += (double)C[b][i];
+      }
+      std::cerr << "checksum=" << checksum << std::endl;      
+#else
+      const double checksum = prk::reduce(C[b].begin(), C[b].end(), 0.0);
+#endif
       residuum += std::abs(checksum - reference) / reference;
   }
   residuum /= matrices;
