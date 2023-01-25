@@ -64,20 +64,32 @@
 ! *******************************************************************
 
 module nstream
-use iso_fortran_env
-contains
-  attributes(global) subroutine kernel(n, scalar, A, B, C)
-    implicit none
-    integer(kind=INT64), intent(in), value :: n
-    real(kind=REAL64), intent(in), value :: scalar
-    real(kind=REAL64), intent(inout) :: A(n)
-    real(kind=REAL64), intent(in) :: B(n), C(n)
-    integer :: i
-    i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
-    if (i <= n) then
-        A(i) = A(i) + B(i) + scalar * C(i)
-    endif
-  end subroutine kernel
+  use iso_fortran_env
+  contains
+    attributes(global) subroutine kernel(n, scalar, A, B, C)
+      implicit none
+      integer(kind=INT64), intent(in), value :: n
+      real(kind=REAL64), intent(in), value :: scalar
+      real(kind=REAL64), intent(inout) :: A(n)
+      real(kind=REAL64), intent(in) :: B(n), C(n)
+      integer :: i
+      i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+      if (i <= n) then
+          A(i) = A(i) + B(i) + scalar * C(i)
+      endif
+    end subroutine kernel
+    attributes(global) subroutine kernel(n, scalar, A, B, C)
+      implicit none
+      integer(kind=INT64), intent(in), value :: n
+      real(kind=REAL64), intent(in), value :: scalar
+      real(kind=REAL64), intent(inout) :: A(n)
+      real(kind=REAL64), intent(in) :: B(n), C(n)
+      integer :: i
+      i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+      if (i <= n) then
+          A(i) = A(i) + B(i) + scalar * C(i)
+      endif
+    end subroutine kernel
 end module nstream
 
 program main
