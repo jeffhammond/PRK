@@ -1,4 +1,3 @@
-#define JEFF 1
 !
 ! Copyright (c) 2017, Intel Corporation
 ! Copyright (c) 2021, NVIDIA
@@ -67,7 +66,6 @@
 module nstream
   use iso_fortran_env
 
-#if JEFF
   interface
     attributes(global) subroutine fake(scalar, A, B, C, DA, DB, DC) &
                                   bind(C,name="actual")
@@ -79,7 +77,6 @@ module nstream
       integer(8), dimension(*), intent(in) :: DA, DB, DC
     end subroutine fake
   end interface
-#endif
 
   contains
 
@@ -96,7 +93,6 @@ module nstream
       endif
     end subroutine kernel
 
-#if JEFF
     attributes(global) subroutine actual(scalar, A, B, C) &
                                   bind(C,name="actual")
       implicit none
@@ -105,6 +101,7 @@ module nstream
       real(kind=REAL64), intent(in) :: B(:), C(:)
       integer :: i
       i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+      !if (i == 1) print*,size(A), size(A,1), kind(A)
       if (i <= size(A)) then
           A(i) = A(i) + B(i) + scalar * C(i)
       endif
@@ -131,7 +128,6 @@ module nstream
       D(15) =  1           ! dim[0].lstride
       D(16) =  D(11)+D(12) ! dim[0].ubound
     end subroutine init_descriptor
-#endif
 
 end module nstream
 
@@ -146,9 +142,7 @@ program main
   integer(kind=INT32) :: iterations, block_size
   integer(kind=INT64) :: length, offset
   real(kind=REAL64), allocatable, managed :: A(:), B(:), C(:)
-#if JEFF
   integer(8), dimension(16), managed :: DA, DB, DC
-#endif
   real(kind=REAL64) :: scalar
   integer(kind=INT64) :: bytes
   ! runtime variables
@@ -181,11 +175,9 @@ program main
   ! ** Allocate space and perform the computation
   ! ********************************************************************
 
-#if JEFF
   call init_descriptor(length, DA)
   call init_descriptor(length, DB)
   call init_descriptor(length, DC)
-#endif
 
   allocate( A(length), B(length), C(length), stat=err)
   if (err .ne. 0) then
@@ -205,14 +197,15 @@ program main
 
   do k=0,iterations
     if (k.eq.1) then
+      err = cudaDeviceSynchronize()
       t0 = prk_get_wtime()
     endif
 
-    call kernel<<<grid, tblock>>>(length, scalar, A, B, C)
+    !call kernel<<<grid, tblock>>>(length, scalar, A, B, C)
+    call fake<<<grid, tblock>>>(scalar, A, B, C, DA, DB, DC)
+    err = cudaDeviceSynchronize()
 
   enddo ! iterations
-
-  err = cudaDeviceSynchronize()
 
   t1 = prk_get_wtime()
 
