@@ -54,14 +54,50 @@
 
 module transpose
     use iso_fortran_env
+
     integer(kind=INT32), parameter :: tile_dim = 32
     integer(kind=INT32), parameter :: block_rows = 8
+
+    interface
+      attributes(global) subroutine fakenaive(A, B, DA, DB) &
+                         bind(C,name="actualnaive")
+        use iso_fortran_env
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(*)
+        real(kind=REAL64), intent(inout) :: B(*)
+        integer(8), dimension(*), intent(in) :: DA, DB
+      end subroutine fakenaive
+    end interface
+
+    interface
+      attributes(global) subroutine fakecoalesced(A, B, DA, DB) &
+                         bind(C,name="actualcoalesced")
+        use iso_fortran_env
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(*)
+        real(kind=REAL64), intent(inout) :: B(*)
+        integer(8), dimension(*), intent(in) :: DA, DB
+      end subroutine fakecoalesced
+    end interface
+
+    interface
+      attributes(global) subroutine fakenobankconflicts(A, B, DA, DB) &
+                         bind(C,name="actualnobankconflicts")
+        use iso_fortran_env
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(*)
+        real(kind=REAL64), intent(inout) :: B(*)
+        integer(8), dimension(*), intent(in) :: DA, DB
+      end subroutine fakenobankconflicts
+    end interface
+
     contains
+
       attributes(global) subroutine naive(order, A, B)
         implicit none
+        integer(kind=INT32), intent(in), value ::  order
         real(kind=REAL64), intent(inout) :: A(order,order)
         real(kind=REAL64), intent(inout) :: B(order,order)
-        integer(kind=INT32), intent(in), value ::  order
         integer :: x, y, j
         x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
         y = (blockIdx%y-1) * tile_dim + (threadIdx%y);
@@ -70,11 +106,12 @@ module transpose
             A(x,y+j) = A(x,y+j) + 1.0d0;
         end do
       end subroutine naive
+
       attributes(global) subroutine coalesced(order, A, B)
         implicit none
+        integer(kind=INT32), intent(in), value ::  order
         real(kind=REAL64), intent(inout) :: A(order,order)
         real(kind=REAL64), intent(inout) :: B(order,order)
-        integer(kind=INT32), intent(in), value ::  order
         real(kind=REAL64), shared :: tile(32,32)
         integer :: x, y, j
         x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
@@ -90,11 +127,12 @@ module transpose
             B(x,y+j) = B(x,y+j) + tile(threadIdx%y+j,threadIdx%x)
         end do
       end subroutine coalesced
+
       attributes(global) subroutine nobankconflicts(order, A, B)
         implicit none
+        integer(kind=INT32), intent(in), value ::  order
         real(kind=REAL64), intent(inout) :: A(order,order)
         real(kind=REAL64), intent(inout) :: B(order,order)
-        integer(kind=INT32), intent(in), value ::  order
         real(kind=REAL64), shared :: tile(33,32)
         integer :: x, y, j
         x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
@@ -110,6 +148,92 @@ module transpose
             B(x,y+j) = B(x,y+j) + tile(threadIdx%y+j,threadIdx%x)
         end do
       end subroutine nobankconflicts
+
+      attributes(global) subroutine actualnaive(A, B) &
+                         bind(C,name="actualnaive")
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(:,:)
+        real(kind=REAL64), intent(inout) :: B(:,:)
+        integer :: x, y, j
+        x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
+        y = (blockIdx%y-1) * tile_dim + (threadIdx%y);
+        !if (x==1 .and. y==1) print*,size(A,1), size(A,2), kind(A)
+        do j = 0,tile_dim-1,block_rows
+            B(y+j,x) = B(y+j,x) + A(x,y+j);
+            A(x,y+j) = A(x,y+j) + 1.0d0;
+        end do
+      end subroutine actualnaive
+
+      attributes(global) subroutine actualcoalesced(A, B) &
+                         bind(C,name="actualcoalesced")
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(:,:)
+        real(kind=REAL64), intent(inout) :: B(:,:)
+        real(kind=REAL64), shared :: tile(32,32)
+        integer :: x, y, j
+        x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
+        y = (blockIdx%y-1) * tile_dim + (threadIdx%y);
+        do j = 0,tile_dim-1,block_rows
+            tile(threadIdx%x,threadIdx%y+j) = A(x,y+j);
+            A(x,y+j) = A(x,y+j) + 1.0d0;
+        end do
+        call syncThreads()
+        x = (blockIdx%y-1) * tile_dim + (threadIdx%x);
+        y = (blockIdx%x-1) * tile_dim + (threadIdx%y);
+        do j = 0,tile_dim-1,block_rows
+            B(x,y+j) = B(x,y+j) + tile(threadIdx%y+j,threadIdx%x)
+        end do
+      end subroutine actualcoalesced
+
+      attributes(global) subroutine actualnobankconflicts(A, B) &
+                         bind(C,name="actualnobankconflicts")
+        implicit none
+        real(kind=REAL64), intent(inout) :: A(:,:)
+        real(kind=REAL64), intent(inout) :: B(:,:)
+        real(kind=REAL64), shared :: tile(33,32)
+        integer :: x, y, j
+        x = (blockIdx%x-1) * tile_dim + (threadIdx%x);
+        y = (blockIdx%y-1) * tile_dim + (threadIdx%y);
+        do j = 0,tile_dim-1,block_rows
+            tile(threadIdx%x,threadIdx%y+j) = A(x,y+j);
+            A(x,y+j) = A(x,y+j) + 1.0d0;
+        end do
+        call syncThreads()
+        x = (blockIdx%y-1) * tile_dim + (threadIdx%x);
+        y = (blockIdx%x-1) * tile_dim + (threadIdx%y);
+        do j = 0,tile_dim-1,block_rows
+            B(x,y+j) = B(x,y+j) + tile(threadIdx%y+j,threadIdx%x)
+        end do
+      end subroutine actualnobankconflicts
+
+      subroutine init_descriptor(n,D)
+        implicit none
+        integer(kind=INT32), intent(in) :: n
+        integer(8), intent(inout) :: D(22)
+        D(1)  = 35               ! tag (version)
+        D(2)  =  1               ! rank
+        D(3)  = 28               ! kind
+        D(4)  =  4               ! len
+        D(5)  =  0               ! flags
+        D(6)  =  n*n             ! lsize
+        D(7)  =  D(6)            ! gsize
+        D(8)  =  -n              ! lbase
+        D(9)  =  0               ! gbase
+        D(10) =  0               ! unused
+        D(11) =  1               ! dim[0].lbound
+        D(12) =  n               ! dim[0].extent
+        D(13) =  0               ! dim[0].sstride
+        D(14) =  0               ! dim[0].soffset
+        D(15) =  1               ! dim[0].lstride
+        D(16) =  D(11)+D(12)     ! dim[0].ubound
+        D(17) =  1               ! dim[1].lbound
+        D(18) =  n               ! dim[1].extent
+        D(19) =  0               ! dim[1].sstride
+        D(20) =  0               ! dim[1].soffset
+        D(21) =  n               ! dim[1].lstride
+        D(22) =  D(17)+D(18)     ! dim[1].ubound
+      end subroutine init_descriptor
+
 end module transpose
 
 program main
@@ -127,6 +251,7 @@ program main
   integer(kind=INT32) ::  order                     ! order of a the matrix
   real(kind=REAL64), allocatable, managed ::  A(:,:)! buffer to hold original matrix
   real(kind=REAL64), allocatable, managed ::  B(:,:)! buffer to hold transposed matrix
+  integer(8), dimension(22), managed :: DA, DB, DC
   integer(kind=INT64) ::  bytes                     ! combined size of matrices
   ! runtime variables
   integer(kind=INT32) ::  i, j, k
@@ -136,10 +261,14 @@ program main
   ! CUDA stuff
   type(dim3) :: grid, tblock
   integer :: variant
-  character(len=16), dimension(3) :: variant_name
+  character(len=40), dimension(6) :: variant_name
   variant_name(1) = 'naive'
   variant_name(2) = 'coalesced'
   variant_name(3) = 'no bank conflicts'
+  ! manual descriptor versions
+  variant_name(4) = 'naive (manual descriptors)'
+  variant_name(5) = 'coalesced (manual descriptors)'
+  variant_name(6) = 'no bank conflicts (manual descriptors)'
 
   ! ********************************************************************
   ! read and test input parameters
@@ -175,14 +304,14 @@ program main
       call get_command_argument(3,argtmp,arglen,err)
       if (err.eq.0) read(argtmp,'(i32)') variant
   endif
-  if ((variant .lt. 0).or.(variant.gt.2)) then
-    write(*,'(a,i5)') 'ERROR: variant must be 0, 1 or 2 : ', variant
+  if ((variant .lt. 0).or.(variant.gt.5)) then
+    write(*,'(a,i5)') 'ERROR: variant must be 0-5 : ', variant
     stop 1
   endif
 
   write(*,'(a,i8)')  'Number of iterations = ', iterations
   write(*,'(a,i8)')  'Matrix order         = ', order
-  write(*,'(a,a16)') 'Variant              = ', variant_name(variant+1)
+  write(*,'(a,a)')   'Variant              = ', variant_name(variant+1)
 
   grid   = dim3(order/tile_dim, order/tile_dim, 1)
   tblock = dim3(tile_dim, block_rows, 1)
@@ -190,6 +319,9 @@ program main
   ! ********************************************************************
   ! ** Allocate space for the input and transpose matrix
   ! ********************************************************************
+
+  call init_descriptor(order, DA)
+  call init_descriptor(order, DB)
 
   allocate( A(order,order), stat=err)
   if (err .ne. 0) then
@@ -222,6 +354,12 @@ program main
         call coalesced<<<grid, tblock>>>(order, A, B)
     else if (variant.eq.2) then
         call nobankconflicts<<<grid, tblock>>>(order, A, B)
+    else if (variant.eq.3) then
+        call fakenaive<<<grid, tblock>>>(A, B, DA, DB)
+    else if (variant.eq.4) then
+        call fakecoalesced<<<grid, tblock>>>(A, B, DA, DB)
+    else if (variant.eq.5) then
+        call fakenobankconflicts<<<grid, tblock>>>(A, B, DA, DB)
     endif
     err = cudaDeviceSynchronize()
 
