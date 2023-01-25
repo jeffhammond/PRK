@@ -1,3 +1,4 @@
+#define JEFF 1
 !
 ! Copyright (c) 2017, Intel Corporation
 ! Copyright (c) 2021, NVIDIA
@@ -65,7 +66,23 @@
 
 module nstream
   use iso_fortran_env
+
+#if JEFF
+  interface
+    attributes(global) subroutine fake(scalar, A, B, C, DA, DB, DC) &
+                                  bind(C,name="actual")
+      use iso_fortran_env
+      implicit none
+      real(kind=REAL64), intent(in), value :: scalar
+      real(kind=REAL64), intent(inout) :: A(*)
+      real(kind=REAL64), intent(in) :: B(*), C(*)
+      integer(8), dimension(*), intent(in) :: DA, DB, DC
+    end subroutine fake
+  end interface
+#endif
+
   contains
+
     attributes(global) subroutine kernel(n, scalar, A, B, C)
       implicit none
       integer(kind=INT64), intent(in), value :: n
@@ -78,18 +95,44 @@ module nstream
           A(i) = A(i) + B(i) + scalar * C(i)
       endif
     end subroutine kernel
-    attributes(global) subroutine kernel(n, scalar, A, B, C)
+
+#if JEFF
+    attributes(global) subroutine actual(scalar, A, B, C) &
+                                  bind(C,name="actual")
       implicit none
-      integer(kind=INT64), intent(in), value :: n
       real(kind=REAL64), intent(in), value :: scalar
-      real(kind=REAL64), intent(inout) :: A(n)
-      real(kind=REAL64), intent(in) :: B(n), C(n)
+      real(kind=REAL64), intent(inout) :: A(:)
+      real(kind=REAL64), intent(in) :: B(:), C(:)
       integer :: i
       i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
-      if (i <= n) then
+      if (i <= size(A)) then
           A(i) = A(i) + B(i) + scalar * C(i)
       endif
-    end subroutine kernel
+    end subroutine actual
+
+    subroutine init_descriptor(n,D)
+      implicit none
+      integer(kind=INT64), intent(in) :: n
+      integer(8), intent(inout) :: D(16)
+      D(1)  = 35           ! tag (version)
+      D(2)  =  1           ! rank
+      D(3)  = 28           ! kind
+      D(4)  =  4           ! len
+      D(5)  =  0           ! flags
+      D(6)  =  n           ! lsize
+      D(7)  =  D(6)        ! gsize
+      D(8)  =  0           ! lbase
+      D(9)  =  0           ! gbase
+      D(10) =  0           ! unused
+      D(11) =  1           ! dim[0].lbound
+      D(12) =  D(6)        ! dim[0].extent
+      D(13) =  0           ! dim[0].sstride
+      D(14) =  0           ! dim[0].soffset
+      D(15) =  1           ! dim[0].lstride
+      D(16) =  D(11)+D(12) ! dim[0].ubound
+    end subroutine init_descriptor
+#endif
+
 end module nstream
 
 program main
@@ -102,9 +145,10 @@ program main
   ! problem definition
   integer(kind=INT32) :: iterations, block_size
   integer(kind=INT64) :: length, offset
-  real(kind=REAL64), allocatable, managed ::  A(:)
-  real(kind=REAL64), allocatable, managed ::  B(:)
-  real(kind=REAL64), allocatable, managed ::  C(:)
+  real(kind=REAL64), allocatable, managed :: A(:), B(:), C(:)
+#if JEFF
+  integer(8), dimension(16), managed :: DA, DB, DC
+#endif
   real(kind=REAL64) :: scalar
   integer(kind=INT64) :: bytes
   ! runtime variables
@@ -136,6 +180,12 @@ program main
   ! ********************************************************************
   ! ** Allocate space and perform the computation
   ! ********************************************************************
+
+#if JEFF
+  call init_descriptor(length, DA)
+  call init_descriptor(length, DB)
+  call init_descriptor(length, DC)
+#endif
 
   allocate( A(length), B(length), C(length), stat=err)
   if (err .ne. 0) then
