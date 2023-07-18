@@ -131,7 +131,6 @@ program main
         t0 = MPI_Wtime()
     endif
 
-    !call MPI_Barrier(MPI_COMM_WORLD)
     ! B += A^T
     do q=1,np
         recv_from = mod( (me + q     ), np)
@@ -149,11 +148,8 @@ program main
 
 
     end do
-    ! This barrier increases the likelihood of correctness, but it may not be sufficient
-    !call MPI_Barrier(MPI_COMM_WORLD)
     ! A += 1
     A = A + one
-    !call MPI_Barrier(MPI_COMM_WORLD)
 
   enddo ! iterations
 
