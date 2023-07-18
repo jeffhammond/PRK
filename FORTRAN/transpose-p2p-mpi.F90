@@ -90,7 +90,7 @@ program main
     call prk_get_arguments('transpose',iterations=iterations,order=order,tile_size=tile_size)
     write(*,'(a25)') 'Parallel Research Kernels'
     write(*,'(a37)') 'Fortran MPI Matrix transpose: B = A^T'
-    write(*,'(a22,i8)') 'Number of MPI procs    = ', np
+    write(*,'(a22,i8)') 'Number of MPI procs     = ', np
     write(*,'(a22,i8)') 'Number of iterations    = ', iterations
     write(*,'(a22,i8)') 'Matrix order            = ', order
     if (mod(order,np).ne.0) then
@@ -119,7 +119,8 @@ program main
   do concurrent (i=1:order, j=1:block_order)
     A(j,i) = me * block_order + (i-1)*order + (j-1)
   end do
-  B = 0
+  B = 0.0d0
+  call MPI_Barrier(MPI_COMM_WORLD)
 
   t0 = 0.0d0
 
@@ -130,8 +131,9 @@ program main
         t0 = MPI_Wtime()
     endif
 
+    !call MPI_Barrier(MPI_COMM_WORLD)
     ! B += A^T
-    do q=0,np-1
+    do q=1,np
         recv_from = mod( (me + q     ), np)
         send_to   = mod( (me - q + np), np)
 
@@ -147,8 +149,11 @@ program main
 
 
     end do
+    ! This barrier increases the likelihood of correctness, but it may not be sufficient
+    !call MPI_Barrier(MPI_COMM_WORLD)
     ! A += 1
     A = A + one
+    !call MPI_Barrier(MPI_COMM_WORLD)
 
   enddo ! iterations
 
@@ -163,10 +168,10 @@ program main
   ! ** Analyze and output results.
   ! ********************************************************************
 
-  abserr = 0.0;
-  addit = (0.5*iterations) * (iterations+1.0)
-  do j=1,block_order
-    do i=1,order
+  abserr = 0.0d0
+  addit = (0.5d0*iterations) * (iterations+1.0d0)
+  do i=1,order
+    do j=1,block_order
       temp =  (order*(me*block_order+j-1)+(i-1)) * (iterations+1)+addit
       abserr = abserr + abs(B(j,i) - temp)
     enddo
