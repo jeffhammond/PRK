@@ -152,6 +152,8 @@ clean:
 	-rm -f prk.f18.mod
 	-rm -f prk_mpi.mod
 	-rm -f prk_mpi.f18.mod
+	-rm -f PRK.mod
+	-rm -f PRK_MPI.mod
 	-rm -f *.o
 	-rm -f *.i90
 	-rm -f *.dbg
@@ -177,3 +179,4 @@ clean:
 	-rm -f *-cufortran
 	-rm -f pic pic_soa
 	-rm -f a.out
+	-rm -f core
