@@ -63,12 +63,11 @@ program main
   integer(kind=INT32) ::  order                     ! order of a the matrix
   real(kind=REAL64), allocatable ::  A(:,:)         ! buffer to hold original matrix
   real(kind=REAL64), allocatable ::  B(:,:)         ! buffer to hold transposed matrix
-  integer(kind=INT64) ::  bytes                     ! combined size of matrices
   ! runtime variables
   integer(kind=INT32) ::  i, j, k
   integer(kind=INT32) ::  it, jt, tile_size
-  real(kind=REAL64) ::  abserr, addit, temp         ! squared error
-  real(kind=REAL64) ::  t0, t1, trans_time, avgtime ! timing parameters
+  real(kind=REAL64) ::  abserr
+  real(kind=REAL64) ::  t0, t1, trans_time
   real(kind=REAL64), parameter ::  epsilon=1.D-8    ! error tolerance
 
   ! ********************************************************************
@@ -154,25 +153,31 @@ program main
   ! ** Analyze and output results.
   ! ********************************************************************
 
-  abserr = 0.0
-  ! this will overflow if iterations>>1000
-  addit = (0.5*iterations) * (iterations+1)
+  abserr = 0.0d0
+  associate(addit => (0.5d0*iterations) * (iterations+1.0d0))
   do j=1,order
     do i=1,order
-      temp = ((real(order,REAL64)*real(i-1,REAL64))+real(j-1,REAL64)) &
-           * real(iterations+1,REAL64)
-      abserr = abserr + abs(B(i,j) - (temp+addit))
+      associate(ro => real(order,REAL64), &
+                ri => real(i-1,REAL64),   &
+                rj => real(j-1,REAL64),   &
+                rit => real(iterations+1,REAL64))
+        associate(temp => (ro * ri + rj) * rit)
+          abserr = abserr + abs(B(i,j) - (temp+addit))
+        end associate
+      end associate
     enddo
   enddo
+  end associate
 
   deallocate( A,B )
 
   if (abserr .lt. epsilon) then
     write(*,'(a)') 'Solution validates'
-    avgtime = trans_time/iterations
-    bytes = 2 * int(order,INT64) * int(order,INT64) * storage_size(A)/8
+    associate( avgtime => trans_time/iterations, &
+               bytes => 2 * int(order,INT64)**2 * storage_size(A)/8)
     write(*,'(a,f13.6,a,f10.6)') 'Rate (MB/s): ',(1.d-6*bytes)/avgtime, &
            ' Avg time (s): ', avgtime
+    end associate
   else
     write(*,'(a,f30.15,a,f30.15)') 'ERROR: Aggregate squared error ',abserr, &
            'exceeds threshold ',epsilon
