@@ -1,5 +1,6 @@
 ///
 /// Copyright (c) 2013, Intel Corporation
+/// Copyright (c) 2023, NVIDIA
 ///
 /// Redistribution and use in source and binary forms, with or without
 /// modification, are permitted provided that the following conditions
@@ -54,6 +55,67 @@
 
 #include "prk_util.h"
 #include "prk_openmp.h"
+
+#if 0
+const int tile_dim = 32;
+const int block_rows = 8;
+
+void transpose_tiled(int order, int tile_size, double * RESTRICT A, double * RESTRICT B)
+{
+    #pragma omp target teams
+    {
+        int i,j;
+        #pragma omp parallel
+        {
+            //int tile[tile_dim][tile_dim+1];
+            //#pragma omp allocate(tile) allocator(omp_pteam_mem_alloc)
+            B[i*order+j] += A[j*order+i];
+            A[j*order+i] += 1.0;
+        }
+    }
+}
+
+void transpose_naive(int order, double * RESTRICT A, double * RESTRICT B)
+{
+    #pragma omp target teams
+    {
+        int i,j;
+        #pragma omp parallel
+        {
+            if ((i<order) && (j<order)) {
+                B[i*order+j] += A[j*order+i];
+                A[j*order+i] += 1.0;
+            }
+        }
+    }
+}
+#else
+void transpose_tiled(int order, int tile_size, double * RESTRICT A, double * RESTRICT B)
+{
+    OMP_TARGET( teams distribute parallel for simd collapse(2) )
+    for (int it=0; it<order; it+=tile_size) {
+      for (int jt=0; jt<order; jt+=tile_size) {
+        for (int i=it; i<MIN(order,it+tile_size); i++) {
+          for (int j=jt; j<MIN(order,jt+tile_size); j++) {
+            B[i*order+j] += A[j*order+i];
+            A[j*order+i] += 1.0;
+          }
+        }
+      }
+    }
+}
+
+void transpose_naive(int order, double * RESTRICT A, double * RESTRICT B)
+{
+    OMP_TARGET( teams distribute parallel for simd collapse(2) schedule(static,1) )
+    for (int i=0;i<order; i++) {
+      for (int j=0;j<order;j++) {
+        B[i*order+j] += A[j*order+i];
+        A[j*order+i] += 1.0;
+      }
+    }
+}
+#endif
 
 int main(int argc, char * argv[])
 {
@@ -130,25 +192,9 @@ int main(int argc, char * argv[])
 
       // transpose the  matrix
       if (tile_size < order) {
-        OMP_TARGET( teams distribute parallel for simd collapse(2) )
-        for (int it=0; it<order; it+=tile_size) {
-          for (int jt=0; jt<order; jt+=tile_size) {
-            for (int i=it; i<MIN(order,it+tile_size); i++) {
-              for (int j=jt; j<MIN(order,jt+tile_size); j++) {
-                B[i*order+j] += A[j*order+i];
-                A[j*order+i] += 1.0;
-              }
-            }
-          }
-        }
+        transpose_tiled(order, tile_size, A, B);
       } else {
-        OMP_TARGET( teams distribute parallel for simd collapse(2) schedule(static,1) )
-        for (int i=0;i<order; i++) {
-          for (int j=0;j<order;j++) {
-            B[i*order+j] += A[j*order+i];
-            A[j*order+i] += 1.0;
-          }
-        }
+        transpose_naive(order, A, B);
       }
     }
     trans_time = omp_get_wtime() - trans_time;
