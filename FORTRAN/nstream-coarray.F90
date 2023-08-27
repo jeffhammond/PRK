@@ -74,9 +74,10 @@ program main
   integer(kind=INT64) :: length, offset
   integer(kind=INT32) :: co_iterations[*]
   integer(kind=INT64) :: co_length[*]
-  real(kind=REAL64), allocatable ::  A(:)[:]
-  real(kind=REAL64), allocatable ::  B(:)[:]
-  real(kind=REAL64), allocatable ::  C(:)[:]
+  !real(kind=REAL64), allocatable ::  A(:)[:]
+  !real(kind=REAL64), allocatable ::  B(:)[:]
+  !real(kind=REAL64), allocatable ::  C(:)[:]
+  real(kind=REAL64), allocatable, dimension(:), codimension[:] ::  A,B,C
   real(kind=REAL64) :: scalar
   integer(kind=INT64) :: bytes
   ! runtime variables
