@@ -51,6 +51,15 @@ It may also be necessary to apply the following (evil) `CPATH` hack on ARM syste
 export CPATH=/usr/include/aarch64-linux-gnu:$CPATH
 ```
 
+## AdaptiveCpp
+
+```
+sudo apt-get install -y libclang-dev libclang-cpp-dev libboost-all-dev
+git clone --recursive https://github.com/AdaptiveCpp/AdaptiveCpp.git /tmp/src
+mkdir /tmp/build && cd /tmp/build
+cmake /tmp/src -DCMAKE_INSTALL_PREFIX=/opt/hipsycl .. && make -j`nproc` install
+```
+
 ## hipSYCL
 
 See https://github.com/illuhad/hipSYCL/tree/master/doc for other options.
