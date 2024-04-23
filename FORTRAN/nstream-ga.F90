@@ -81,7 +81,7 @@ program main
   integer(kind=INT32) :: world_size, world_rank
   integer(kind=INT32) :: ierr
   !type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
-  integer, parameter :: world = MPI_COMM_WORLD
+  integer(kind=INT32), parameter :: world = MPI_COMM_WORLD
   ! GA - compiled with 64-bit INTEGER
   logical :: ok
   integer :: me, np
@@ -149,17 +149,19 @@ program main
     write(*,'(a22,i12)') 'Offset               = ', offset
   endif
 
-#if 1
-  call ga_brdcst(0,iterations,4,0)
-  call ga_brdcst(0,length,8,0)
-  call ga_brdcst(0,offset,8,0)
+#if 0
+  call ga_brdcst(MT_F_BYTE,iterations,4,0)
+  call ga_brdcst(MT_F_BYTE,length,8,0)
+  call ga_brdcst(MT_F_BYTE,offset,8,0)
 #else
   block
     integer :: comm
+    integer(kind=INT32) :: comm4
     call ga_mpi_comm_pgroup_default(comm)
-    call MPI_Bcast(iterations, 1, MPI_INTEGER4, 0, comm)
-    call MPI_Bcast(length,     1, MPI_INTEGER8, 0, comm)
-    call MPI_Bcast(offset,     1, MPI_INTEGER8, 0, comm)
+    comm4 = comm
+    call MPI_Bcast(iterations, int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), comm4, ierr)
+    call MPI_Bcast(length,     int(1,kind=INT32), MPI_INTEGER8, int(0,kind=INT32), comm4, ierr)
+    call MPI_Bcast(offset,     int(1,kind=INT32), MPI_INTEGER8, int(0,kind=INT32), comm4, ierr)
   end block
 #endif
 

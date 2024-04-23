@@ -67,7 +67,7 @@ program main
   integer(kind=INT32) :: world_size, world_rank
   integer(kind=INT32) :: ierr
   !type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
-  integer, parameter :: world = MPI_COMM_WORLD
+  integer(kind=INT32), parameter :: world = MPI_COMM_WORLD
   ! GA - compiled with 64-bit INTEGER
   logical :: ok
   integer :: me, np
@@ -110,7 +110,7 @@ program main
     write(*,'(a22,i8)') 'Matrix order            = ', order
   endif
   call MPI_Bcast(iterations, int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), MPI_COMM_WORLD, ierr)
-  call MPI_Bcast(order, int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), MPI_COMM_WORLD, ierr)
+  call MPI_Bcast(order,      int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), MPI_COMM_WORLD, ierr)
 
 #if PRK_CHECK_GA_MPI
   ! We do use MPI anywhere, but if we did, we would need to avoid MPI collectives
