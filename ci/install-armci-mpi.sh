@@ -27,8 +27,7 @@ if [ -d ${ARMCI_MPI_DIR} ] ; then
   cd ${ARMCI_MPI_DIR} && git checkout master && git pull >& git.log
   echo "Step 1 of 4 succeeded."
 elif [ -x "$(command -v git)" ] ; then
-  #git clone -b mpi3rma --depth 10 http://git.mpich.org/armci-mpi.git ${ARMCI_MPI_DIR} >& git.log
-  git clone -b master --depth 10 https://github.com/jeffhammond/armci-mpi.git ${ARMCI_MPI_DIR} >& git.log
+  git clone https://github.com/pmodels/armci-mpi.git ${ARMCI_MPI_DIR} >& git.log
   stat=$?
   if [ $stat -ne 0 ] ; then
     echo "git clone failed"

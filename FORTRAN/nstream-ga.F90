@@ -67,7 +67,7 @@
 
 program main
   use, intrinsic :: iso_fortran_env
-  use mpi_f08
+  use mpi!_f08
   use prk
   implicit none
 #include "global.fh"
@@ -80,7 +80,8 @@ program main
   integer(kind=INT32) :: provided
   integer(kind=INT32) :: world_size, world_rank
   integer(kind=INT32) :: ierr
-  type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
+  !type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
+  integer, parameter :: world = MPI_COMM_WORLD
   ! GA - compiled with 64-bit INTEGER
   logical :: ok
   integer :: me, np
@@ -111,7 +112,7 @@ program main
   ! read and test input parameters
   ! ********************************************************************
 
-  call MPI_Init_thread(requested,provided)
+  call MPI_Init_thread(requested, provided, ierr)
 
   ! ask GA to allocate enough memory for 4 vectors, just to be safe
   max_mem = length * 4 * ( storage_size(scalar) / 8 )
@@ -126,8 +127,8 @@ program main
   ! the GA world process group.  In this case, we need to get the MPI communicator
   ! associated with GA world, but those routines assume MPI communicators are integers.
 
-  call MPI_Comm_rank(world, world_rank)
-  call MPI_Comm_size(world, world_size)
+  call MPI_Comm_rank(world, world_rank, ierr)
+  call MPI_Comm_size(world, world_size, ierr)
 
   if ((me.ne.world_rank).or.(np.ne.world_size)) then
       write(*,'(a12,i8,i8)') 'rank=',me,world_rank
@@ -277,7 +278,7 @@ program main
 #endif
 
   call ga_terminate()
-  call mpi_finalize()
+  call MPI_Finalize(ierr)
 
 end program main
 

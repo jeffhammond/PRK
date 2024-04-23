@@ -54,7 +54,7 @@
 
 program main
   use, intrinsic :: iso_fortran_env
-  use mpi_f08
+  use mpi!_f08
   use prk
   implicit none
 #include "global.fh"
@@ -66,7 +66,8 @@ program main
   integer(kind=INT32) :: provided
   integer(kind=INT32) :: world_size, world_rank
   integer(kind=INT32) :: ierr
-  type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
+  !type(MPI_Comm), parameter :: world = MPI_COMM_WORLD
+  integer, parameter :: world = MPI_COMM_WORLD
   ! GA - compiled with 64-bit INTEGER
   logical :: ok
   integer :: me, np
@@ -84,7 +85,7 @@ program main
   real(kind=REAL64) ::  t0, t1, trans_time, avgtime
   real(kind=REAL64), parameter ::  epsilon=1.d-8
 
-  call MPI_Init_thread(requested,provided)
+  call MPI_Init_thread(requested, provided, ierr)
 
   !call ga_initialize()
   ! ask GA to allocate enough memory for 4 matrices, just to be safe
@@ -101,15 +102,15 @@ program main
   ! ********************************************************************
 
   if (me.eq.0) then
-    call prk_get_arguments('transpose',iterations=iterations,order=order,tile_size=tile_size)
+    call prk_get_arguments('transpose',iterations=iterations,order=order)
     write(*,'(a25)') 'Parallel Research Kernels'
     write(*,'(a47)') 'Fortran Global Arrays Matrix transpose: B = A^T'
     write(*,'(a22,i8)') 'Number of GA procs     = ', np
     write(*,'(a22,i8)') 'Number of iterations    = ', iterations
     write(*,'(a22,i8)') 'Matrix order            = ', order
   endif
-  call MPI_Bcast(iterations, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD)
-  call MPI_Bcast(order, 1, MPI_INTEGER4, 0, MPI_COMM_WORLD)
+  call MPI_Bcast(iterations, int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), MPI_COMM_WORLD, ierr)
+  call MPI_Bcast(order, int(1,kind=INT32), MPI_INTEGER4, int(0,kind=INT32), MPI_COMM_WORLD, ierr)
 
 #if PRK_CHECK_GA_MPI
   ! We do use MPI anywhere, but if we did, we would need to avoid MPI collectives
@@ -117,8 +118,8 @@ program main
   ! the GA world process group.  In this case, we need to get the MPI communicator
   ! associated with GA world, but those routines assume MPI communicators are integers.
 
-  call MPI_Comm_rank(world, world_rank)
-  call MPI_Comm_size(world, world_size)
+  call MPI_Comm_rank(world, world_rank, ierr)
+  call MPI_Comm_size(world, world_size, ierr)
 
   if ((me.ne.world_rank).or.(np.ne.world_size)) then
       write(*,'(a12,i8,i8)') 'rank=',me,world_rank
@@ -276,7 +277,7 @@ program main
 #endif
 
   call ga_terminate()
-  call mpi_finalize()
+  call MPI_Finalize(ierr)
 
 end program main
 
