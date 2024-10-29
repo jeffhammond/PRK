@@ -64,7 +64,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
+#include "prk_openmp.h"
 
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -117,6 +119,7 @@ int main(int argc, char * argv[])
 
   size_t bytes = length*sizeof(double);
 
+#if 0
   char mmap_path[255] = {0};
   char * mmap_env = getenv("PRK_MMAP_PATH");
   fprintf(stderr, "PRK_MMAP_PATH=%s\n", mmap_env);
@@ -144,19 +147,24 @@ int main(int argc, char * argv[])
       printf("error name: %s\n", error_name);
       abort();
   }
+#endif
 
   int flags = 0;
-  //flags |= MAP_PRIVATE;
-  flags |= MAP_SHARED;
+  flags |= MAP_PRIVATE;
+  //flags |= MAP_SHARED;
   //flags |= MAP_NORESERVE;
-  flags |= MAP_POPULATE;
+  //flags |= MAP_POPULATE;
   //flags |= MAP_UNINITIALIZED;
   //flags |= MAP_HUGETLB;
   //flags |= MAP_HUGE_2MB;
+  //flags |= MAP_HUGE_1GB;
   //flags |= MAP_SYNC;
 
+#if 0
   double * ptr = (double*)mmap(NULL, 3*bytes, PROT_READ | PROT_WRITE, flags, fd, 0);
-  //double * ptr = (double*)mmap(NULL, 3*bytes, PROT_READ | PROT_WRITE, flags | MAP_ANONYMOUS, -1, 0);
+#else
+  double * ptr = (double*)mmap(NULL, 3*bytes, PROT_READ | PROT_WRITE, flags | MAP_ANONYMOUS, -1, 0);
+#endif
   if (ptr==MAP_FAILED || ptr==NULL) {
       fprintf(stderr, "mmap returned %p, errno=%d\n", ptr, errno);
       char error_name[255] = {0};
@@ -235,10 +243,12 @@ int main(int argc, char * argv[])
   if (err) {
       printf("munmap failed! (err=%d, errno=%d)\n", err, errno);
   }
+#if 0
   err = close(fd);
   if (err) {
       printf("close failed! (err=%d, errno=%d)\n", err, errno);
   }
+#endif
 
   return 0;
 }
