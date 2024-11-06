@@ -145,9 +145,12 @@ function (@main)(args)
     scalar = 3.0
 
     MPI.Barrier(comm)
-    t0 = time_ns()
 
-    for _ in 0:iterations
+    for k in 0:iterations
+        if k==1
+            MPI.Barrier(comm)
+            t0 = time_ns()
+        end
         do_nstream!(A, B, C, scalar, vlength)
     end
 

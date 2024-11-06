@@ -137,9 +137,12 @@ function (@main)(args)
     scalar = 3.0
 
     MPI.Barrier(comm)
-    t0 = time_ns()
 
-    for _ in 0:iterations
+    for k in 0:iterations
+        if k==1
+            MPI.Barrier(comm)
+            t0 = time_ns()
+        end
         do_nstream!(A, B, C, scalar, vlength)
     end
 
@@ -154,13 +157,12 @@ function (@main)(args)
     ar = 0.0
     br = 2.0
     cr = 2.0
-    for k in 0:iterations
+    for _ in 0:iterations
         ar += br + scalar * cr
     end
 
     ar *= vlength
 
-    precompile(do_norm, (Array{Float64,1}, Int64))
     asum = do_norm(A, vlength)
 
     epsilon = 1.e-8
