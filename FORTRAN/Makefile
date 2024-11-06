@@ -124,10 +124,10 @@ dgemm-blas: dgemm-blas.F90 prk.mod
 	$(MPIFORT) $(FCFLAGS) $< prk_mod.o $(GAFLAG) -o $@
 
 %-mpi-openmp: %-mpi.F90 prk.mod
-	$(MPIFORT) $(FCFLAGS) $(OPENMPFLAG) $< prk_mod.o prk_mpi_mod.o -o $@
+	$(MPIFORT) $(MPIINC) $(FCFLAGS) $(OPENMPFLAG) $< prk_mod.o prk_mpi_mod.o $(MPILIB) -o $@
 
 %-mpi: %-mpi.F90 prk.mod prk_mpi.mod
-	$(MPIFORT) $(FCFLAGS) $< prk_mod.o prk_mpi_mod.o -o $@
+	$(MPIFORT) $(MPIINC) $(FCFLAGS) $< prk_mod.o prk_mpi_mod.o $(MPILIB) -o $@
 
 %-coarray: %-coarray.F90 prk.mod
 	$(CAFC) $(FCFLAGS) $< prk_mod.o $(COARRAYFLAG) -o $@
