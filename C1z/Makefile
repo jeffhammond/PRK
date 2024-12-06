@@ -60,7 +60,7 @@ openmp: nstream-openmp \
 
 tasks: p2p-tasks-openmp p2p-tasks-2d-openmp
 
-mpi: nstream-mpi
+mpi: nstream-mpi transpose-a2a-mpi transpose-p2p-mpi
 
 petsc: nstream-petsc transpose-petsc
 
@@ -72,7 +72,7 @@ target: nstream-target stencil-target transpose-target nstream-alloc-target nstr
 
 taskloop: nstream-taskloop stencil-taskloop transpose-taskloop
 
-openacc: nstream-openacc stencil-openacc transpose-openacc
+openacc: nstream-openacc stencil-openacc transpose-openacc transpose-2d-openacc
 
 cilk: stencil-cilk transpose-cilk
 
