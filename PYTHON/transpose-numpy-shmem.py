@@ -118,19 +118,27 @@ def main():
         print('Python SHMEM/Numpy  Matrix transpose: B = A^T')
 
     if len(sys.argv) != 3:
-        print('argument count = ', len(sys.argv))
-        sys.exit("Usage: ./transpose <# iterations> <matrix order>")
+        if (me==0):
+            print('argument count = ', len(sys.argv))
+            print("Usage: ./transpose <# iterations> <matrix order>")
+        sys.exit()
 
     iterations = int(sys.argv[1])
     if iterations < 1:
-        sys.exit("ERROR: iterations must be >= 1")
+        if (me==0):
+            print("ERROR: iterations must be >= 1")
+        sys.exit()
 
     order = int(sys.argv[2])
     if order < 1:
-        sys.exit("ERROR: order must be >= 1")
+        if (me==0):
+            print("ERROR: order must be >= 1")
+        sys.exit()
 
     if order % np != 0:
-        sys.exit("ERROR: matrix order ", order," should be divisible by # procs", np)
+        if (me==0):
+            print(f"ERROR: matrix order ({order}) should be divisible by # procs ({np})")
+        sys.exit()
 
     block_order = int(order / np)
 
@@ -145,7 +153,7 @@ def main():
     # ** Allocate space for the input and transpose matrix
     # ********************************************************************
 
-    LA = numpy.fromfunction(lambda i,j:  me * block_order + i*order + j, (order,block_order), dtype=float)
+    LA = numpy.fromfunction(lambda i,j:  me * block_order + i*order + j, (order,block_order), dtype='d')
     A = shmem.full((order,block_order),LA)
     B = shmem.zeros((order,block_order))
     T = shmem.zeros((order,block_order))
@@ -189,7 +197,7 @@ def main():
     G = numpy.concatenate(F,axis=1)
     #if (me==0):
     #    print(G)
-    H = numpy.fromfunction(lambda i,j: ((iterations/2.0)+(order*j+i))*(iterations+1.0), (order,order), dtype=float)
+    H = numpy.fromfunction(lambda i,j: ((iterations/2.0)+(order*j+i))*(iterations+1.0), (order,order), dtype='d')
     abserr = numpy.linalg.norm(numpy.reshape(G-H,order*order),ord=1)
 
     shmem.free(B)
