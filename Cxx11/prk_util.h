@@ -408,6 +408,24 @@ namespace prk {
         return __builtin_pow(x,n);
     }
 
+    template <typename T>
+    void print_flop_rate_time(T name, double rate, double time)
+    {
+        const auto d = std::log10(rate);
+        const int  shifts[6] = { 15, 12, 9, 6, 3, 0 };
+        const double scales[6] = { 1.e-15, 1.e-12, 1.e-9, 1.e-6, 1.e-3, 1. };
+        const char prefix[6] = { 'P', 'T', 'G', 'M', 'K', ' ' };
+        for ( int r=0; r<6; r++ ) {
+            const auto shift = shifts[r];
+            if (d > shift) {
+                std::cout << name
+                          << " Rate (" << prefix[r] << "F/s): " << scales[r] * rate
+                          << " Avg time (s): " << time << std::endl;
+                break;
+            }
+        }
+    }
+
 } // namespace prk
 
 #endif /* PRK_UTIL_H */
