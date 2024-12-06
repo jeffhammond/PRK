@@ -61,7 +61,7 @@ endif
 OCCAFLAGS = -I${OCCADIR}/include -Wl,-rpath -Wl,${OCCADIR}/lib -L${OCCADIR}/lib -locca
 
 .PHONY: all clean vector valarray openmp target opencl taskloop stl \
-	ranges kokkos raja cuda cublas sycl dpcpp \
+	ranges kokkos raja cuda cudastf cublas sycl dpcpp \
 	boost-compute thrust executor oneapi onemkl
 
 EXTRA=
@@ -122,18 +122,21 @@ raja: p2p-vector-raja stencil-vector-raja nstream-vector-raja \
 
 cuda: stencil-cuda transpose-cuda nstream-cuda nstream-managed-cuda
 
+stf: cudastf
+cudastf: dgemm-cudastf dgemm-cublas-cudastf stencil-cudastf p2p-cudastf transpose-cudastf
+
 hip: nstream-hip transpose-hip stencil-hip nstream-managed-hip
 
 hipstl: nstream-hipstl
 
-hipblas: nstream-hipblas sgemm-hipblas dgemm-hipblas transpose-hipblas
+hipblas: nstream-hipblas sgemm-hipblas dgemm-hipblas xgemm-hipblas transpose-hipblas
 
 thrust: nstream-host-thrust nstream-device-thrust \
         transpose-host-thrust transpose-device-thrust
 
 cublas: transpose-cublas nstream-cublas \
 	dgemm-cublas dgemm-multigpu-cublas dgemm-mpi-cublas \
-	sgemm-cublas xgemm-cublas
+	sgemm-cublas xgemm-cublas dgemm-managed-cublas
 
 cblas: transpose-cblas dgemm-cblas sgemm-cblas xgemm-cblas
 
@@ -306,6 +309,14 @@ endif
 %.s: %.cc prk_util.h
 	$(CXX) $(CXXFLAGS) $(ASMFLAGS) -S $< -o $@
 
+%-cudastf: %-cudastf.cu
+	$(NVCC) $(CPPFLAGS) $(CUDAFLAGS) $(CUDASTF_CFLAGS) $(CUDASTF_LDFLAGS) $< -o $@
+
+%-cublas-cudastf: %-cublas-cudastf.cu prk_util.h prk_cuda.h
+	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(CUDASTF_CFLAGS) $(CUDASTF_LDFLAGS) -DPRK_USE_CUBLAS $< -lcublas -lcublasLt -o $@
+
+
+
 clean:
 	-rm -f *.o
 	-rm -f *.s
@@ -348,6 +359,7 @@ clean:
 	-rm -f *-halide
 	-rm -f *-boost-compute
 	-rm -f *-openacc
+	-rm -f *-cudastf
 	-rm -f transpose-async transpose-thread
 
 cleancl:
