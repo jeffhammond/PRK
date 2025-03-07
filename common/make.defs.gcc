@@ -180,11 +180,14 @@ CUDAFLAGS+=--forward-unknown-to-host-compiler # MPI rpath
 #
 # NVSHMEM (Apt packages not reliable...)
 #
+#NVSHMEM_DIR=/opt/nvidia/hpc_sdk/Linux_x86_64/24.11/comm_libs/12.6/nvshmem
 NVSHMEMFLAGS=-rdc=true -diag-suppress 3012,3013
-#NVSHMEMFLAGS+=-I/usr/include/nvshmem_12
-NVSHMEMFLAGS+=-I/opt/nvidia/hpc_sdk/Linux_x86_64/24.11/comm_libs/12.6/nvshmem/include
-NVSHMEMFLAGS+=-L/opt/nvidia/hpc_sdk/Linux_x86_64/24.11/comm_libs/12.6/nvshmem/lib
-NVSHMEMFLAGS+=-Wl,-rpath=/opt/nvidia/hpc_sdk/Linux_x86_64/24.11/comm_libs/12.6/nvshmem/lib
+#NVSHMEMFLAGS+=-I${NVSHMEM_DIR}/include
+#NVSHMEMFLAGS+=-L${NVSHMEM_DIR}/lib
+#NVSHMEMFLAGS+=-Wl,-rpath=${NVSHMEM_DIR}/lib
+NVSHMEMFLAGS+=-I/usr/include/nvshmem_12
+NVSHMEMFLAGS+=-L/usr/lib/x86_64-linux-gnu/nvshmem/12/
+NVSHMEMFLAGS+=-Wl,-rpath=/usr/lib/x86_64-linux-gnu/nvshmem/12/ --forward-unknown-to-host-compiler
 NVSHMEMFLAGS+=-lnvshmem_device -lnvshmem_host
 #
 # Halide

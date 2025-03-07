@@ -159,14 +159,13 @@ CBLASFLAG=${BLASFLAG}
 # Mac w/ CUDA emulation via https://github.com/hughperkins/coriander
 #NVCC=/opt/llvm/cocl/bin/cocl
 # Linux w/ NVIDIA CUDA
-# NVCC never supports the latest GCC.
 # Use appropriate arch or code is compiled to ancient features.
 #NVCC=${NVHPC_CBIN}nvc++
 #NVCC=${NVHPC_CBIN}nvcc
-NVCC=/usr/local/cuda-12.6/bin/nvcc
+NVCC=/usr/local/cuda/bin/nvcc
 CUDAFLAGS=-g -O3 -std=c++20
 CUDAFLAGS+=--extended-lambda
-CUDAFLAGS+=--gpu-architecture=sm_89
+CUDAFLAGS+=--gpu-architecture=native
 #CUDAFLAGS+=-allow-unsupported-compiler
 #CUDAFLAGS+=-ccbin=g++-13 -lm #-lstdc++
 #CUDAFLAGS+=--compiler-bindir=/opt/gcc/12.3.0/bin/
@@ -196,6 +195,18 @@ CUDAFLAGS+=-D_X86INTRIN_H_INCLUDED
 #CUDAFLAGS+=-D_AVX512IFMAINTRIN_H_INCLUDED
 #CUDAFLAGS+=-D_AVX512IFMAVLINTRIN_H_INCLUDED
 #CUDAFLAGS+=-D_AVX512ERINTRIN_H_INCLUDED
+#
+# NVSHMEM (Apt packages not reliable...)
+#
+#NVSHMEM_DIR=/opt/nvidia/hpc_sdk/Linux_x86_64/24.11/comm_libs/12.6/nvshmem
+NVSHMEMFLAGS=-rdc=true -diag-suppress 3012,3013
+#NVSHMEMFLAGS+=-I${NVSHMEM_DIR}/include
+#NVSHMEMFLAGS+=-L${NVSHMEM_DIR}/lib
+#NVSHMEMFLAGS+=-Wl,-rpath=${NVSHMEM_DIR}/lib
+NVSHMEMFLAGS+=-I/usr/include/nvshmem_12
+NVSHMEMFLAGS+=-L/usr/lib/x86_64-linux-gnu/nvshmem/12/
+NVSHMEMFLAGS+=-Wl,-rpath=/usr/lib/x86_64-linux-gnu/nvshmem/12/ --forward-unknown-to-host-compiler
+NVSHMEMFLAGS+=-lnvshmem_device -lnvshmem_host
 #
 # CUDASTF
 #
