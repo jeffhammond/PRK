@@ -167,12 +167,9 @@ int main(int argc, char * argv[])
 
     const int num_gpus = info.num_gpus();
     info.set_gpu(me % num_gpus);
-
     prk::MPI::barrier();
-    ncclComm_t nccl_comm_world;
-    prk::check( ncclGroupStart() );
-    prk::check( ncclCommInitRank(&nccl_comm_world, np, uniqueId, me) );
-    prk::check( ncclGroupEnd() );
+
+    ncclComm_t nccl_comm_world = prk::NCCL::init(np, uniqueId, me);
     prk::MPI::barrier();
 
     //////////////////////////////////////////////////////////////////////
@@ -245,6 +242,7 @@ int main(int argc, char * argv[])
               }
             }
         }
+
         // increment A
         cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
       }
@@ -260,7 +258,7 @@ int main(int argc, char * argv[])
     prk::MPI::print_matrix(h_B, order, block_order, "B@" + std::to_string(me));
 #endif
 
-    prk::check( ncclCommDestroy(nccl_comm_world) );
+    prk::NCCL::finalize(nccl_comm_world);
 
     prk::CUDA::free(A);
     prk::CUDA::free(B);

@@ -24,6 +24,20 @@ namespace prk
     namespace NCCL
     {
 
+        ncclComm_t init(int np, ncclUniqueId uniqueId, int me)
+        {
+            ncclComm_t comm;
+            prk::check( ncclGroupStart() );
+            prk::check( ncclCommInitRank(&comm, np, uniqueId, me) );
+            prk::check( ncclGroupEnd() );
+            return comm;
+        }
+
+        void finalize(ncclComm_t comm)
+        {
+            prk::check( ncclCommDestroy(comm) );
+        }
+
         template <typename T>
         ncclDataType_t get_NCCL_Datatype(T t) { 
             std::cerr << "get_NCCL_Datatype resolution failed for type " << typeid(T).name() << std::endl;
