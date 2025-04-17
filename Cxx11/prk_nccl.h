@@ -51,18 +51,26 @@ namespace prk
             T * ptr;
             size_t bytes = n * sizeof(T);
             prk::check( ncclMemAlloc((void**)&ptr, bytes) );
-            void * handle;
-            prk::check( ncclCommRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
-            address_handle_map.insert_or_assign(ptr, handle);
+            if (register_) {
+                void * handle;
+                prk::check( ncclCommRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
+                address_handle_map.insert_or_assign(ptr, handle);
+            }
             return ptr;
         }
 
         template <typename T>
         void free(T * ptr)
         {
-            void * handle = address_handle_map.at(ptr);
-            prk::check( ncclCommDeregister(nccl_comm_world, handle) );
-            address_handle_map.erase(ptr);
+            try {
+                void * handle = address_handle_map.at(ptr);
+                prk::check( ncclCommDeregister(nccl_comm_world, handle) );
+                address_handle_map.erase(ptr);
+            }
+            catch(const std::out_of_range& ex)
+            {
+                // no problem - the memory was not registered
+            }
             prk::check( ncclMemFree((void*)ptr) );
         }
         
