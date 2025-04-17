@@ -39,6 +39,22 @@ namespace prk
         }
 
         template <typename T>
+        T * alloc(size_t n)
+        {
+            T * ptr;
+            size_t bytes = n * sizeof(T);
+            prk::check( ncclMemAlloc((void**)&ptr, bytes) );
+            return ptr;
+        }
+
+        template <typename T>
+        void free(T * ptr)
+        {
+            prk::check( ncclMemFree((void*)ptr) );
+        }
+        
+
+        template <typename T>
         ncclDataType_t get_NCCL_Datatype(T t) { 
             std::cerr << "get_NCCL_Datatype resolution failed for type " << typeid(T).name() << std::endl;
             std::abort();

@@ -192,9 +192,9 @@ int main(int argc, char * argv[])
     }
 
     //A[order][block_order]
-    double * A = prk::CUDA::malloc_device<double>(nelems);
-    double * B = prk::CUDA::malloc_device<double>(nelems);
-    double * T = prk::CUDA::malloc_device<double>(block_order * block_order);
+    double * A = prk::NCCL::alloc<double>(nelems);
+    double * B = prk::NCCL::alloc<double>(nelems); // does not need to be NCCL memory
+    double * T = prk::NCCL::alloc<double>(block_order * block_order);
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
@@ -240,11 +240,11 @@ int main(int argc, char * argv[])
     prk::MPI::print_matrix(h_B, order, block_order, "B@" + std::to_string(me));
 #endif
 
-    prk::NCCL::finalize(nccl_comm_world);
+    prk::NCCL::free(A);
+    prk::NCCL::free(B);
+    prk::NCCL::free(T);
 
-    prk::CUDA::free(A);
-    prk::CUDA::free(B);
-    prk::CUDA::free(T);
+    prk::NCCL::finalize(nccl_comm_world);
 
     prk::CUDA::free_host(h_A);
 
