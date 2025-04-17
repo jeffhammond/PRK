@@ -1,7 +1,4 @@
 include ../common/make.defs
-include ../common/PRKVERSION
-
-CPPFLAGS = -DPRKVERSION=$(PRKVERSION)
 
 # debugging
 ifdef VERBOSE
@@ -90,7 +87,8 @@ target: stencil-openmp-target transpose-openmp-target nstream-openmp-target
 
 taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
 
-mpi: nstream-mpi stencil-mpi dgemm-mpi-cblas transpose-a2a-mpi transpose-p2p-mpi transpose-get-mpi
+mpi: nstream-mpi stencil-mpi dgemm-mpi-cblas \
+     transpose-a2a-mpi transpose-p2p-mpi transpose-get-mpi
 
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
@@ -124,6 +122,12 @@ cuda: stencil-cuda transpose-cuda nstream-cuda nstream-managed-cuda
 
 stf: cudastf
 cudastf: dgemm-cudastf dgemm-cublas-cudastf stencil-cudastf p2p-cudastf transpose-cudastf
+
+nccl: nstream-nccl transpose-a2a-mpi-nccl transpose-p2p-mpi-nccl
+
+oshmem: transpose-get-oshmem
+
+nvshmem: transpose-get-nvshmem transpose-a2a-nvshmem transpose-ptr-nvshmem
 
 hip: nstream-hip transpose-hip stencil-hip nstream-managed-hip
 
@@ -169,6 +173,9 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 %-mpi: %-mpi.cc prk_util.h prk_mpi.h transpose-kernel.h
 	$(MPICXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+
+%-oshmem: %-oshmem.cc prk_util.h prk_oshmem.h transpose-kernel.h
+	$(OSHCXX) $(CXXFLAGS) $(OSHINC) $< $(OSHLIB) -o $@
 
 %-mpi-cblas: %-mpi-cblas.cc prk_util.h prk_mpi.h
 	$(CXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) $(CBLASFLAGS) -o $@
@@ -275,6 +282,14 @@ endif
 %-cublas: %-cublas.cu prk_util.h prk_cuda.h
 	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) -DPRK_USE_CUBLAS $< -lcublas -lcublasLt -o $@
 
+%-nccl: %-nccl.cu prk_util.h prk_cuda.h prk_nccl.h transpose-kernel.h
+	$(NVCC) $(CUDAFLAGS) $(CPPFLAGS) $(MPIINC) $(NCCLINC) $< $(MPILIB) $(NCCLLIB) -o $@
+
+%-nvshmem: %-nvshmem.cu prk_util.h prk_cuda.h prk_nvshmem.h transpose-kernel.h
+	$(NVCC) $(NVSHMEMFLAGS) $(CUDAFLAGS) $(CPPFLAGS) $< -o $@
+
+#$(NVCC) $(NVSHMEMFLAGS) $(MPIINC) $(CUDAFLAGS) $(CPPFLAGS) $< $(MPILIB) -o $@
+
 %-hip: %-hip.cc prk_util.h prk_hip.h
 	$(HIPCC) $(HIPFLAGS) $(CPPFLAGS) $< -o $@
 
@@ -326,13 +341,13 @@ clean:
 	-rm -f *.dwarf
 	-rm -rf *.dSYM # Mac
 	-rm -f nstream transpose stencil p2p sparse dgemm
+	-rm -f transpose-async transpose-thread
 	-rm -f *-vector
 	-rm -f *-valarray
 	-rm -f *-openmp
 	-rm -f *-target
 	-rm -f *-taskloop
 	-rm -f *-mpi
-	-rm -f 
 	-rm -f *-opencl
 	-rm -f *-sycl
 	-rm -f *-sycl-usm
@@ -362,7 +377,9 @@ clean:
 	-rm -f *-boost-compute
 	-rm -f *-openacc
 	-rm -f *-cudastf
-	-rm -f transpose-async transpose-thread
+	-rm -f *-nccl
+	-rm -f *-nvshmem
+	-rm -f *-oshmem
 
 cleancl:
 	-rm -f star[123456789].cl

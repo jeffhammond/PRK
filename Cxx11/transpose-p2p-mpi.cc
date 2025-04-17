@@ -73,7 +73,7 @@ int main(int argc, char * argv[])
     size_t order, block_order, tile_size;
 
     if (me == 0) {
-      std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+      std::cout << "Parallel Research Kernels" << std::endl;
       std::cout << "C++11/MPI Matrix transpose: B = A^T" << std::endl;
 
       try {
@@ -161,7 +161,6 @@ int main(int argc, char * argv[])
             offset = block_order * block_order * recv_from;
             transpose_block(B.data() + offset, T.data(), block_order, tile_size); 
         }
-        prk::MPI::barrier();
         // increment A
         std::transform(A.begin(), A.end(), A.begin(), [](auto a) { return a + 1; });
       }
