@@ -82,7 +82,7 @@ __global__ void nstream2(const unsigned n, const double scalar, double * A, cons
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/CUDA STREAM triad: A = B + scalar * C" << std::endl;
 
   prk::CUDA::info info;
@@ -108,6 +108,8 @@ int main(int argc, char * argv[])
       length = std::atol(argv[2]);
       if (length <= 0) {
         throw "ERROR: vector length must be positive";
+      } else if (length >= UINT_MAX) {
+        throw "ERROR: vector length must be less than UINT_MAX";
       }
 
       if (argc>3) {
