@@ -119,7 +119,7 @@ void transpose_naive(int order, double * RESTRICT A, double * RESTRICT B)
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/OpenMP TARGET Matrix transpose: B = A^T" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
