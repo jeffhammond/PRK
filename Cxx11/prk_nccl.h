@@ -6,6 +6,7 @@
 #include <array>
 #include <string>
 #include <typeinfo>
+#include <map>
 
 #include <nccl.h>
 
@@ -23,37 +24,48 @@ namespace prk
 
     namespace NCCL
     {
+        ncclComm_t nccl_comm_world;
 
-        ncclComm_t init(int np, ncclUniqueId uniqueId, int me)
+        std::map<void*,void*> address_handle_map{};
+
+        ncclComm_t get_world(void)
         {
-            ncclComm_t comm;
-            prk::check( ncclGroupStart() );
-            prk::check( ncclCommInitRank(&comm, np, uniqueId, me) );
-            prk::check( ncclGroupEnd() );
-            return comm;
+            return nccl_comm_world;
         }
 
-        void finalize(ncclComm_t comm)
+        void init(int np, ncclUniqueId uniqueId, int me)
         {
-            prk::check( ncclCommDestroy(comm) );
+            prk::check( ncclGroupStart() );
+            prk::check( ncclCommInitRank(&nccl_comm_world, np, uniqueId, me) );
+            prk::check( ncclGroupEnd() );
+        }
+
+        void finalize(void)
+        {
+            prk::check( ncclCommDestroy(nccl_comm_world) );
         }
 
         template <typename T>
-        T * alloc(size_t n)
+        T * alloc(size_t n, bool register_ = true)
         {
             T * ptr;
             size_t bytes = n * sizeof(T);
             prk::check( ncclMemAlloc((void**)&ptr, bytes) );
+            void * handle;
+            prk::check( ncclCommRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
+            address_handle_map.insert_or_assign(ptr, handle);
             return ptr;
         }
 
         template <typename T>
         void free(T * ptr)
         {
+            void * handle = address_handle_map.at(ptr);
+            prk::check( ncclCommDeregister(nccl_comm_world, handle) );
+            address_handle_map.erase(ptr);
             prk::check( ncclMemFree((void*)ptr) );
         }
         
-
         template <typename T>
         ncclDataType_t get_NCCL_Datatype(T t) { 
             std::cerr << "get_NCCL_Datatype resolution failed for type " << typeid(T).name() << std::endl;
@@ -66,27 +78,27 @@ namespace prk
         constexpr ncclDataType_t get_NCCL_Datatype(int i) { return ncclInt32; }
 
         template <typename T>
-        void alltoall(const T * sbuffer, T * rbuffer, size_t count, ncclComm_t comm, cudaStream_t stream = 0) {
+        void alltoall(const T * sbuffer, T * rbuffer, size_t count, cudaStream_t stream = 0) {
             ncclDataType_t type = get_NCCL_Datatype(*sbuffer);
 
             int np;
-            prk::check( ncclCommCount(comm, &np) );
+            prk::check( ncclCommCount(nccl_comm_world, &np) );
 
             prk::check( ncclGroupStart() );
             for (int r=0; r<np; r++) {
-                prk::check( ncclSend(sbuffer + r*count, count, type, r, comm, stream) );
-                prk::check( ncclRecv(rbuffer + r*count, count, type, r, comm, stream) );
+                prk::check( ncclSend(sbuffer + r*count, count, type, r, nccl_comm_world, stream) );
+                prk::check( ncclRecv(rbuffer + r*count, count, type, r, nccl_comm_world, stream) );
             }
             prk::check( ncclGroupEnd() );
         }
 
         template <typename T>
-        void sendrecv(const T * sbuffer,  int dst, T * rbuffer, int src, size_t count, ncclComm_t comm, cudaStream_t stream = 0) {
+        void sendrecv(const T * sbuffer,  int dst, T * rbuffer, int src, size_t count, cudaStream_t stream = 0) {
             ncclDataType_t type = get_NCCL_Datatype(*sbuffer);
             prk::check( ncclGroupStart() );
             {
-                prk::check( ncclSend(sbuffer, count, type, dst, comm, stream) );
-                prk::check( ncclRecv(rbuffer, count, type, src, comm, stream) );
+                prk::check( ncclSend(sbuffer, count, type, dst, nccl_comm_world, stream) );
+                prk::check( ncclRecv(rbuffer, count, type, src, nccl_comm_world, stream) );
             }
             prk::check( ncclGroupEnd() );
         }

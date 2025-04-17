@@ -169,7 +169,7 @@ int main(int argc, char * argv[])
     info.set_gpu(me % num_gpus);
     prk::MPI::barrier();
 
-    ncclComm_t nccl_comm_world = prk::NCCL::init(np, uniqueId, me);
+    prk::NCCL::init(np, uniqueId, me);
     prk::MPI::barrier();
 
     //////////////////////////////////////////////////////////////////////
@@ -214,7 +214,7 @@ int main(int argc, char * argv[])
             const int recv_from = (me + r) % np;
             const int send_to   = (me - r + np) % np;
             size_t offset = block_order * block_order * send_to;
-            prk::NCCL::sendrecv(A + offset, send_to, T, recv_from, block_order*block_order, nccl_comm_world);
+            prk::NCCL::sendrecv(A + offset, send_to, T, recv_from, block_order*block_order);
             offset = block_order * block_order * recv_from;
             if (variant==0) {
               transposeNaive<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
@@ -244,7 +244,7 @@ int main(int argc, char * argv[])
     prk::NCCL::free(B);
     prk::NCCL::free(T);
 
-    prk::NCCL::finalize(nccl_comm_world);
+    prk::NCCL::finalize();
 
     prk::CUDA::free_host(h_A);
 

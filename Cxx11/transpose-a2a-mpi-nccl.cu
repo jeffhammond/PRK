@@ -169,7 +169,7 @@ int main(int argc, char * argv[])
     info.set_gpu(me % num_gpus);
     prk::MPI::barrier();
 
-    ncclComm_t nccl_comm_world = prk::NCCL::init(np, uniqueId, me);
+    prk::NCCL::init(np, uniqueId, me);
     prk::MPI::barrier();
 
     //////////////////////////////////////////////////////////////////////
@@ -209,7 +209,7 @@ int main(int argc, char * argv[])
             trans_time = prk::wtime();
         }
 
-        prk::NCCL::alltoall(A, T, block_order*block_order, nccl_comm_world);
+        prk::NCCL::alltoall(A, T, block_order*block_order);
 #ifdef DEBUG
         prk::CUDA::sync();
         prk::MPI::barrier();
@@ -262,7 +262,7 @@ int main(int argc, char * argv[])
     prk::NCCL::free(B);
     prk::NCCL::free(T);
 
-    prk::NCCL::finalize(nccl_comm_world);
+    prk::NCCL::finalize();
 
     prk::CUDA::free_host(h_A);
 
