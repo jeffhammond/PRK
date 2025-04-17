@@ -10,6 +10,11 @@
 
 #include <nccl.h>
 
+// not working right now
+#if 0 && NCCL_VERSION(NCCL_MAJOR, NCCL_MINOR, NCCL_PATCH) >= 22700
+#define HAS_NCCLCOMMSYMMETRICREGISTER
+#endif
+
 #include "prk_cuda.h"
 
 namespace prk
@@ -26,7 +31,7 @@ namespace prk
     {
         ncclComm_t nccl_comm_world;
 
-        std::map<void*,void*> address_handle_map{};
+        std::map<void*,std::pair<void*,bool>> address_handle_map{};
 
         ncclComm_t get_world(void)
         {
@@ -46,15 +51,23 @@ namespace prk
         }
 
         template <typename T>
-        T * alloc(size_t n, bool register_ = true)
+        T * alloc(size_t n, bool symmetric = true, bool register_ = true)
         {
             T * ptr;
             size_t bytes = n * sizeof(T);
             prk::check( ncclMemAlloc((void**)&ptr, bytes) );
             if (register_) {
                 void * handle;
-                prk::check( ncclCommRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
-                address_handle_map.insert_or_assign(ptr, handle);
+#ifdef HAS_NCCLCOMMSYMMETRICREGISTER
+                if (symmetric) {
+                    prk::check( ncclCommSymmetricRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
+                }
+                else
+#endif
+                {
+                    prk::check( ncclCommRegister(nccl_comm_world, (void**)&ptr, bytes, &handle) );
+                }
+                address_handle_map.insert_or_assign(ptr, std::make_pair(handle,symmetric));
             }
             return ptr;
         }
@@ -63,8 +76,16 @@ namespace prk
         void free(T * ptr)
         {
             try {
-                void * handle = address_handle_map.at(ptr);
-                prk::check( ncclCommDeregister(nccl_comm_world, handle) );
+                auto [handle,symmetric] = address_handle_map.at(ptr);
+#ifdef HAS_NCCLCOMMSYMMETRICREGISTER
+                if (symmetric) {
+                    prk::check( ncclCommSymmetricDeregister(nccl_comm_world, handle) );
+                }
+                else
+#endif
+                {
+                    prk::check( ncclCommDeregister(nccl_comm_world, handle) );
+                }
                 address_handle_map.erase(ptr);
             }
             catch(const std::out_of_range& ex)
