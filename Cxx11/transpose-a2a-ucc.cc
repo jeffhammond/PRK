@@ -54,16 +54,16 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "prk_util.h"
-#include "prk_mpi.h"
+#include "prk_ucc.h"
 #include "transpose-kernel.h"
 
 int main(int argc, char * argv[])
 {
   {
-    prk::MPI::state mpi(&argc,&argv);
+    prk::UCC::state ucc(&argc,&argv);
 
-    int np = prk::MPI::size();
-    int me = prk::MPI::rank();
+    int np = prk::UCC::size();
+    int me = prk::UCC::rank();
 
     //////////////////////////////////////////////////////////////////////
     /// Read and test input parameters
@@ -74,7 +74,7 @@ int main(int argc, char * argv[])
 
     if (me == 0) {
       std::cout << "Parallel Research Kernels" << std::endl;
-      std::cout << "C++11/MPI Matrix transpose: B = A^T" << std::endl;
+      std::cout << "C++11/UCC Matrix transpose: B = A^T" << std::endl;
 
       try {
         if (argc < 3) {
@@ -104,7 +104,7 @@ int main(int argc, char * argv[])
       }
       catch (const char * e) {
         std::cout << e << std::endl;
-        prk::MPI::abort(1);
+        prk::UCC::abort(1);
         return 1;
       }
      
@@ -114,9 +114,9 @@ int main(int argc, char * argv[])
       std::cout << "Tile size            = " << tile_size << std::endl;
     }
 
-    prk::MPI::bcast(&iterations);
-    prk::MPI::bcast(&order);
-    prk::MPI::bcast(&tile_size);
+    prk::UCC::bcast(&iterations);
+    prk::UCC::bcast(&order);
+    prk::UCC::bcast(&tile_size);
     
     block_order = order / np;
 
@@ -139,7 +139,7 @@ int main(int argc, char * argv[])
             A[i*block_order + j] = me * block_order + i * order + j;
         }
     }
-    prk::MPI::barrier();
+    prk::UCC::barrier();
 
     //prk::MPI::print_matrix(A, order, block_order, "A@" + std::to_string(me));
 
@@ -148,10 +148,10 @@ int main(int argc, char * argv[])
 
         if (iter==1) {
             trans_time = prk::wtime();
-            prk::MPI::barrier();
+            prk::UCC::barrier();
         }
 
-        prk::MPI::alltoall(A.data(), block_order*block_order, T.data(), block_order*block_order);
+        prk::UCC::alltoall(A.data(), block_order*block_order, T.data(), block_order*block_order);
 
         // transpose the  matrix  
         for (int r=0; r<np; r++) {
@@ -179,7 +179,7 @@ int main(int argc, char * argv[])
         abserr += prk::abs(B[i*block_order+j] - temp);
       }
     }
-    abserr = prk::MPI::sum(abserr);
+    abserr = prk::UCC::sum(abserr);
 
 #ifdef VERBOSE
     std::cout << "Sum of absolute differences: " << abserr << std::endl;
