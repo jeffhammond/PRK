@@ -90,6 +90,8 @@ taskloop: stencil-taskloop transpose-taskloop nstream-taskloop
 mpi: nstream-mpi stencil-mpi dgemm-mpi-cblas \
      transpose-a2a-mpi transpose-p2p-mpi transpose-get-mpi
 
+ucc: transpose-a2a-ucc
+
 opencl: p2p-innerloop-opencl stencil-opencl transpose-opencl nstream-opencl
 
 sycl: nstream-sycl nstream-sycl-explicit p2p-hyperplane-sycl stencil-sycl transpose-sycl pic-sycl \
@@ -173,6 +175,9 @@ p2p-hyperplane-vector: p2p-hyperplane-openmp.cc prk_util.h
 
 %-mpi: %-mpi.cc prk_util.h prk_mpi.h transpose-kernel.h
 	$(MPICXX) $(CXXFLAGS) $(MPIINC) $< $(MPILIB) -o $@
+
+%-ucc: %-ucc.cc prk_util.h prk_ucc.h transpose-kernel.h
+	$(MPICXX) $(CXXFLAGS) $(UCCINC) $< $(UCCLIB) -o $@
 
 %-oshmem: %-oshmem.cc prk_util.h prk_oshmem.h transpose-kernel.h
 	$(OSHCXX) $(CXXFLAGS) $(OSHINC) $< $(OSHLIB) -o $@

@@ -62,8 +62,8 @@ int main(int argc, char * argv[])
   {
     prk::UCC::state ucc(&argc,&argv);
 
-    int np = prk::UCC::size();
-    int me = prk::UCC::rank();
+    int np = ucc.get_size();
+    int me = ucc.get_rank();
 
     //////////////////////////////////////////////////////////////////////
     /// Read and test input parameters

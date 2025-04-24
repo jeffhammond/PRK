@@ -23,7 +23,6 @@ namespace prk
     namespace MPI
     {
         double wtime(void) { return MPI_Wtime(); }
-        double wtick(void) { return MPI_Wtick(); }
 
         [[noreturn]] void abort(int errorcode = -1, MPI_Comm comm = MPI_COMM_WORLD)
         {
