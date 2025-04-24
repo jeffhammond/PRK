@@ -239,6 +239,12 @@ MPILIB+=-lopen-pal -lopen-rte
 #MPIINC=-I/usr/include/mpich-3.2-$$(uname -m)
 #MPILIB=-L/usr/lib64/mpich-3.2/lib -lmpi
 #
+# UCC
+#
+UCCDIR=${HOME}/MPI/install-ucx-ucc
+UCCINC=-I${UCCDIR}/include
+UCCLIB=-L${UCCDIR}/lib -lucc
+#
 # OpenSHMEM
 #
 OSHDIR=/opt/mpich/oshmpi2-mpich
