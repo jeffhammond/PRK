@@ -169,11 +169,31 @@ int main(int argc, char * argv[])
     info.set_gpu(me % num_gpus);
 
     prk::MPI::barrier();
+
     ncclComm_t nccl_comm_world;
+    double t0 = prk::wtime();
     prk::check( ncclGroupStart() );
     prk::check( ncclCommInitRank(&nccl_comm_world, np, uniqueId, me) );
     prk::check( ncclGroupEnd() );
+    double t1 = prk::wtime();
+    std::cout << me << ": ncclCommInitRank took " << t1-t0 << " seconds" << std::endl;
     prk::MPI::barrier();
+
+    {
+        ncclUniqueId uniqueId2;
+        if (me == 0) {
+            prk::check( ncclGetUniqueId(&uniqueId2) );
+        }
+        prk::MPI::bcast(&uniqueId2);
+        ncclComm_t nccl_comm_dup;
+        double t00 = prk::wtime();
+        prk::check( ncclGroupStart() );
+        prk::check( ncclCommInitRank(&nccl_comm_dup, np, uniqueId2, me) );
+        prk::check( ncclGroupEnd() );
+        double t11 = prk::wtime();
+        std::cout << me << ": ncclCommInitRank 2 took " << t11-t00 << " seconds" << std::endl;
+        prk::MPI::barrier();
+    }
 
     //////////////////////////////////////////////////////////////////////
     // Allocate space for the input and transpose matrix

@@ -114,9 +114,9 @@ int main(int argc, char * argv[])
       std::cout << "Tile size            = " << tile_size << std::endl;
     }
 
-    prk::UCC::bcast(&iterations);
-    prk::UCC::bcast(&order);
-    prk::UCC::bcast(&tile_size);
+    ucc.bcast(&iterations);
+    ucc.bcast(&order);
+    ucc.bcast(&tile_size);
     
     block_order = order / np;
 
@@ -139,7 +139,7 @@ int main(int argc, char * argv[])
             A[i*block_order + j] = me * block_order + i * order + j;
         }
     }
-    prk::UCC::barrier();
+    ucc.barrier();
 
     //prk::MPI::print_matrix(A, order, block_order, "A@" + std::to_string(me));
 
@@ -148,10 +148,10 @@ int main(int argc, char * argv[])
 
         if (iter==1) {
             trans_time = prk::wtime();
-            prk::UCC::barrier();
+            ucc.barrier();
         }
 
-        prk::UCC::alltoall(A.data(), block_order*block_order, T.data(), block_order*block_order);
+        ucc.alltoall(A.data(), block_order*block_order, T.data(), block_order*block_order);
 
         // transpose the  matrix  
         for (int r=0; r<np; r++) {
@@ -161,6 +161,7 @@ int main(int argc, char * argv[])
         // increment A
         std::transform(A.begin(), A.end(), A.begin(), [](auto a) { return a + 1; });
       }
+      ucc.barrier();
       trans_time = prk::wtime() - trans_time;
     }
 
