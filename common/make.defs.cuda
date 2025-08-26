@@ -1,7 +1,7 @@
 #
 # This file shows the CUDA toolchain options
 # for both NVHPC and GCC.
-NVHPC_PATH=/opt/nvidia/hpc_sdk/Linux_$$(uname -m)/24.9
+NVHPC_PATH=/opt/nvidia/hpc_sdk/Linux_$$(uname -m)/25.7
 #NVHPC_PATH=/proj/nv/Linux_$$(uname -m)/21.11
 #NVHPC_PATH=${HOME}/NVIDIA/hpc_sdk/Linux_$$(uname -m)/2021
 NVHPC_CBIN=${NVHPC_PATH}/compilers/bin/
@@ -232,7 +232,7 @@ CUDASTF_CFLAGS+=-lcuda
 #
 # mpiicc wraps icc.  mpicc and mpigcc wrap gcc.
 #MPIDIR=${NVHPC_PATH}/comm_libs/hpcx
-MPIDIR=${NVHPC_PATH}/comm_libs/12.6/openmpi4/latest
+MPIDIR=${NVHPC_PATH}/comm_libs/12.9/openmpi4/latest
 MPICC=${MPIDIR}/bin/mpicc
 MPICXX=${MPIDIR}/bin/mpicxx
 MPIFORT=${MPIDIR}/bin/mpifort
