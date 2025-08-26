@@ -232,14 +232,15 @@ CUDASTF_CFLAGS+=-lcuda
 #
 # mpiicc wraps icc.  mpicc and mpigcc wrap gcc.
 #MPIDIR=${NVHPC_PATH}/comm_libs/hpcx
-MPIDIR=${NVHPC_PATH}/comm_libs/12.9/openmpi4/latest
+#MPIDIR=${NVHPC_PATH}/comm_libs/12.9/openmpi4/latest
+MPIDIR=/usr/local
 MPICC=${MPIDIR}/bin/mpicc
 MPICXX=${MPIDIR}/bin/mpicxx
 MPIFORT=${MPIDIR}/bin/mpifort
 MPIINC=-I${MPIDIR}/include
 MPILIB=-L${MPIDIR}/lib -lmpi
 #MPILIB+=-Wl,-rpath -Wl,${MPIDIR}/lib -Wl,--enable-new-dtags # NVCC chokes on -Wl
-MPILIB+=-lopen-pal -lopen-rte
+#MPILIB+=-lopen-pal -lopen-rte
 #MPILIB=-L/usr/local/opt/libevent/lib -L${MPIDIR}/lib -lmpi
 #MPIINC=-I/usr/include/mpich-3.2-$$(uname -m)
 #MPILIB=-L/usr/lib64/mpich-3.2/lib -lmpi
