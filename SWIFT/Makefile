@@ -10,7 +10,7 @@ SWIFTC := swiftc
 SWIFTFLAGS := -O -whole-module-optimization
 
 # Default target
-all: nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal
+all: nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal xgemm xgemm-accelerate xgemm-metal
 
 # Build nstream benchmark
 nstream: nstream.swift
@@ -45,11 +45,34 @@ dgemm-metal: dgemm-metal.swift
 p2p-metal: p2p-metal.swift
 	$(SWIFTC) $(SWIFTFLAGS) -o p2p-metal p2p-metal.swift
 
+# Build xgemm multi-precision benchmarks
+xgemm: xgemm.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o xgemm xgemm.swift
+
+xgemm-accelerate: xgemm-accelerate.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o xgemm-accelerate xgemm-accelerate.swift
+
+xgemm-metal: xgemm-metal.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o xgemm-metal xgemm-metal.swift
+
 # Run tests with default parameters
-test: test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p
+test: test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p test-xgemm test-xgemm-accelerate
+
+# Run xgemm tests
+test-xgemm: xgemm
+	@echo "Testing xgemm..."
+	./xgemm 10 500
+
+test-xgemm-accelerate: xgemm-accelerate
+	@echo "Testing xgemm-accelerate..."
+	./xgemm-accelerate 10 500
+
+test-xgemm-metal: xgemm-metal
+	@echo "Testing xgemm-metal..."
+	./xgemm-metal 10 500
 
 # Run Metal GPU tests
-test-metal: test-nstream-metal test-transpose-metal test-dgemm-metal test-p2p-metal
+test-metal: test-nstream-metal test-transpose-metal test-dgemm-metal test-p2p-metal test-xgemm-metal
 
 test-nstream: nstream
 	@echo "Testing nstream..."
@@ -112,7 +135,7 @@ benchmark-p2p: p2p
 
 # Clean build artifacts
 clean:
-	rm -f nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal
+	rm -f nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal xgemm xgemm-accelerate xgemm-metal
 
 # Install Swift (requires Homebrew)
 install-swift:
@@ -146,4 +169,4 @@ help:
 	@echo "  ./nstream 10 1000000"
 	@echo "  ./transpose 10 1000"
 
-.PHONY: all test benchmark clean install-swift check-swift help test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p benchmark-nstream benchmark-transpose benchmark-dgemm benchmark-dgemm-accelerate benchmark-p2p
+.PHONY: all test benchmark clean install-swift check-swift help test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p test-xgemm test-xgemm-accelerate test-xgemm-metal benchmark-nstream benchmark-transpose benchmark-dgemm benchmark-dgemm-accelerate benchmark-p2p test-metal

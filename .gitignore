@@ -461,6 +461,9 @@ SWIFT/nstream-metal
 SWIFT/transpose-metal
 SWIFT/dgemm-metal
 SWIFT/p2p-metal
+SWIFT/xgemm
+SWIFT/xgemm-accelerate
+SWIFT/xgemm-metal
 dgemm-vector.dSYM
 dgemm.dSYM
 nstream-opencl.dSYM
