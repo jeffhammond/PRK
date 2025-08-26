@@ -452,6 +452,8 @@ SERIAL/Sparse/sparse
 SERIAL/Stencil/stencil
 SERIAL/Synch_p2p/p2p
 SERIAL/Transpose/transpose
+SWIFT/nstream
+SWIFT/transpose
 dgemm-vector.dSYM
 dgemm.dSYM
 nstream-opencl.dSYM
