@@ -172,6 +172,7 @@ CUDAFLAGS+=--gpu-architecture=sm_90
 #CUDAFLAGS+=-ccbin=g++-13 -lm #-lstdc++
 #CUDAFLAGS+=--compiler-bindir=/opt/gcc/12.3.0/bin/
 #CUDAFLAGS+=-forward-unknown-to-host-compiler -fopenmp
+CUDAFLAGS+=--forward-unknown-to-host-compiler # rpath
 CUDAFLAGS+=-rdc=true # FIXES ptxas fatal   : Unresolved extern function 'cudaCGGetIntrinsicHandle'
 #CUDAFLAGS+=-I${NVHPC_PATH}/math_libs/12.6/targets/$$(uname -m)-linux/include
 #CUDAFLAGS+=-L${NVHPC_PATH}/math_libs/12.6/targets/$$(uname -m)-linux/lib
