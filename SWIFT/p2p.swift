@@ -31,20 +31,22 @@
 
 //////////////////////////////////////////////////////////////////////
 ///
-/// NAME:    transpose
+/// NAME:    Pipeline
 ///
-/// PURPOSE: This program measures the time for the transpose of a
-///          column-major stored matrix into a row-major stored matrix.
+/// PURPOSE: This program tests the efficiency with which point-to-point
+///          synchronization can be carried out. It does so by executing
+///          a pipelined algorithm on an m*n grid. The first array dimension
+///          is distributed among the threads (stripwise decomposition).
 ///
-/// USAGE:   Program input is the matrix order and the number of times to
-///          repeat the operation:
+/// USAGE:   The program takes as input the
+///          dimensions of the grid, and the number of iterations on the grid
 ///
-///          <progname> <# iterations> <matrix order>
+///          <progname> <iterations> <m> <n>
 ///
 ///          The output consists of diagnostics to make sure the
-///          transpose worked and timing statistics.
+///          algorithm worked, and of timing statistics.
 ///
-/// HISTORY: Written by  Rob Van der Wijngaart, February 2009.
+/// HISTORY: Written by Rob Van der Wijngaart, February 2009.
 ///          Converted to Swift by Cursor AI, 2025.
 ///
 //////////////////////////////////////////////////////////////////////
@@ -53,7 +55,7 @@ import Foundation
 
 func main() {
     print("Parallel Research Kernels")
-    print("Swift Matrix transpose: B = A^T")
+    print("Swift pipeline execution on 2D grid")
     
     //////////////////////////////////////////////////////////////////////
     /// Read and test input parameters
@@ -61,8 +63,8 @@ func main() {
     
     let arguments = CommandLine.arguments
     
-    guard arguments.count == 3 else {
-        print("Usage: swift transpose.swift <# iterations> <matrix order>")
+    guard arguments.count == 4 else {
+        print("Usage: swift p2p.swift <# iterations> <first array dimension> <second array dimension>")
         exit(1)
     }
     
@@ -71,76 +73,70 @@ func main() {
         exit(1)
     }
     
-    guard let order = Int(arguments[2]), order > 0 else {
-        print("ERROR: matrix order must be positive")
+    guard let m = Int(arguments[2]), m >= 1 else {
+        print("ERROR: array dimension must be >= 1")
         exit(1)
     }
     
-    print("Number of iterations = \(iterations)")
-    print("Matrix order         = \(order)")
+    guard let n = Int(arguments[3]), n >= 1 else {
+        print("ERROR: array dimension must be >= 1")
+        exit(1)
+    }
+    
+    print("Grid sizes               = \(m) * \(n)")
+    print("Number of iterations     = \(iterations)")
     
     //////////////////////////////////////////////////////////////////////
-    // Allocate space for the input and transpose matrix
+    // Allocate space and initialize grid
     //////////////////////////////////////////////////////////////////////
     
-    // Initialize matrices as 1D arrays for better performance
-    var A = Array(repeating: 0.0, count: order * order)
-    var B = Array(repeating: 0.0, count: order * order)
+    var grid = Array(repeating: Array(repeating: 0.0, count: n), count: m)
     
-    // Initialize matrix A with sequence values
-    for i in 0..<order {
-        for j in 0..<order {
-            A[i * order + j] = Double(i * order + j)
-        }
+    // Initialize grid boundaries
+    for j in 0..<n {
+        grid[0][j] = Double(j)
+    }
+    for i in 0..<m {
+        grid[i][0] = Double(i)
     }
     
     var startTime = 0.0
     
-    for iter in 0...iterations {
+    for k in 0...iterations {
         
         // Start timer after warmup iteration
-        if iter == 1 {
+        if k == 1 {
             startTime = CFAbsoluteTimeGetCurrent()
         }
         
-        // Perform matrix transpose: B[i][j] += A[j][i]; A[j][i] += 1.0
-        for i in 0..<order {
-            for j in 0..<order {
-                B[i * order + j] += A[j * order + i]
-                A[j * order + i] += 1.0
+        // Execute pipeline algorithm
+        for i in 1..<m {
+            for j in 1..<n {
+                grid[i][j] = grid[i-1][j] + grid[i][j-1] - grid[i-1][j-1]
             }
         }
+        
+        // Copy top right corner value to bottom left corner to create dependency
+        grid[0][0] = -grid[m-1][n-1]
     }
     
-    let transTime = CFAbsoluteTimeGetCurrent() - startTime
+    let pipelineTime = CFAbsoluteTimeGetCurrent() - startTime
     
     //////////////////////////////////////////////////////////////////////
     /// Analyze and output results
     //////////////////////////////////////////////////////////////////////
     
-    // Calculate additive term for validation
-    let addit = Double(iterations * (iterations + 1)) / 2.0
-    var abserr = 0.0
-    
-    for i in 0..<order {
-        for j in 0..<order {
-            let ij = i * order + j
-            let ji = j * order + i
-            let reference = Double(ij) * Double(iterations + 1) + addit
-            abserr += abs(B[ji] - reference)
-        }
-    }
-    
     let epsilon = 1.0e-8
-    let nbytes = 2.0 * Double(order * order) * 8.0 // 8 bytes per double, read and write
     
-    if abserr < epsilon {
+    // Verify correctness, using top right value
+    let cornerVal = Double((iterations + 1) * (n + m - 2))
+    if abs(grid[m-1][n-1] - cornerVal) / cornerVal < epsilon {
         print("Solution validates")
-        let avgtime = transTime / Double(iterations)
-        let rate = 1.0e-6 * nbytes / avgtime
-        print(String(format: "Rate (MB/s): %.6f Avg time (s): %.6f", rate, avgtime))
+        let avgtime = pipelineTime / Double(iterations)
+        let rate = 1.0e-6 * 2.0 * Double(m-1) * Double(n-1) / avgtime
+        print(String(format: "Rate (MFlops/s): %.6f; Avg time (s): %.6f", rate, avgtime))
     } else {
-        print("ERROR: Aggregate error \(abserr) exceeds threshold \(epsilon)")
+        print("ERROR: checksum \(grid[m-1][n-1]) does not match verification value \(cornerVal)")
         print("ERROR: solution did not validate")
         exit(1)
     }

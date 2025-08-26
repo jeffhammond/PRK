@@ -10,7 +10,7 @@ SWIFTC := swiftc
 SWIFTFLAGS := -O -whole-module-optimization
 
 # Default target
-all: nstream transpose
+all: nstream transpose dgemm dgemm-accelerate p2p
 
 # Build nstream benchmark
 nstream: nstream.swift
@@ -20,8 +20,20 @@ nstream: nstream.swift
 transpose: transpose.swift
 	$(SWIFTC) $(SWIFTFLAGS) -o transpose transpose.swift
 
+# Build dgemm benchmark
+dgemm: dgemm.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o dgemm dgemm.swift
+
+# Build dgemm-accelerate benchmark (using Accelerate framework)
+dgemm-accelerate: dgemm-accelerate.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o dgemm-accelerate dgemm-accelerate.swift
+
+# Build p2p benchmark
+p2p: p2p.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o p2p p2p.swift
+
 # Run tests with default parameters
-test: test-nstream test-transpose
+test: test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p
 
 test-nstream: nstream
 	@echo "Testing nstream..."
@@ -31,8 +43,20 @@ test-transpose: transpose
 	@echo "Testing transpose..."
 	./transpose 10 500
 
+test-dgemm: dgemm
+	@echo "Testing dgemm..."
+	./dgemm 10 500
+
+test-dgemm-accelerate: dgemm-accelerate
+	@echo "Testing dgemm-accelerate..."
+	./dgemm-accelerate 10 500
+
+test-p2p: p2p
+	@echo "Testing p2p..."
+	./p2p 10 100 100
+
 # Run benchmarks with larger parameters
-benchmark: benchmark-nstream benchmark-transpose
+benchmark: benchmark-nstream benchmark-transpose benchmark-dgemm benchmark-dgemm-accelerate benchmark-p2p
 
 benchmark-nstream: nstream
 	@echo "Benchmarking nstream..."
@@ -42,9 +66,21 @@ benchmark-transpose: transpose
 	@echo "Benchmarking transpose..."
 	./transpose 10 2000
 
+benchmark-dgemm: dgemm
+	@echo "Benchmarking dgemm..."
+	./dgemm 10 1000
+
+benchmark-dgemm-accelerate: dgemm-accelerate
+	@echo "Benchmarking dgemm-accelerate..."
+	./dgemm-accelerate 10 1000
+
+benchmark-p2p: p2p
+	@echo "Benchmarking p2p..."
+	./p2p 10 2000 2000
+
 # Clean build artifacts
 clean:
-	rm -f nstream transpose
+	rm -f nstream transpose dgemm dgemm-accelerate p2p
 
 # Install Swift (requires Homebrew)
 install-swift:
@@ -78,4 +114,4 @@ help:
 	@echo "  ./nstream 10 1000000"
 	@echo "  ./transpose 10 1000"
 
-.PHONY: all test benchmark clean install-swift check-swift help test-nstream test-transpose benchmark-nstream benchmark-transpose
+.PHONY: all test benchmark clean install-swift check-swift help test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p benchmark-nstream benchmark-transpose benchmark-dgemm benchmark-dgemm-accelerate benchmark-p2p

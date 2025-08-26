@@ -100,22 +100,22 @@ func main() {
     let C = Array(repeating: 2.0, count: length)
     
     let scalar = 3.0
-    var nstreamTime = 0.0
+    var startTime = 0.0
     
     for iter in 0...iterations {
         
         // Start timer after warmup iteration
-        let startTime = iter == 1 ? CFAbsoluteTimeGetCurrent() : 0.0
+        if iter == 1 {
+            startTime = CFAbsoluteTimeGetCurrent()
+        }
         
         // Perform STREAM triad: A = B + scalar * C
         for i in 0..<length {
             A[i] += B[i] + scalar * C[i]
         }
-        
-        if iter == 1 {
-            nstreamTime = CFAbsoluteTimeGetCurrent() - startTime
-        }
     }
+    
+    let nstreamTime = CFAbsoluteTimeGetCurrent() - startTime
     
     //////////////////////////////////////////////////////////////////////
     /// Analyze and output results

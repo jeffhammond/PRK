@@ -31,29 +31,32 @@
 
 //////////////////////////////////////////////////////////////////////
 ///
-/// NAME:    transpose
+/// NAME:    dgemm-accelerate
 ///
-/// PURPOSE: This program measures the time for the transpose of a
-///          column-major stored matrix into a row-major stored matrix.
+/// PURPOSE: This program tests the efficiency with which a dense matrix
+///          dense multiplication is carried out using Apple's Accelerate
+///          framework BLAS implementation
 ///
-/// USAGE:   Program input is the matrix order and the number of times to
-///          repeat the operation:
+/// USAGE:   The program takes as input the matrix order,
+///          the number of times the matrix-matrix multiplication
+///          is carried out.
 ///
 ///          <progname> <# iterations> <matrix order>
 ///
 ///          The output consists of diagnostics to make sure the
-///          transpose worked and timing statistics.
+///          algorithm worked, and of timing statistics.
 ///
-/// HISTORY: Written by  Rob Van der Wijngaart, February 2009.
-///          Converted to Swift by Cursor AI, 2025.
+/// HISTORY: Written by Rob Van der Wijngaart, February 2009.
+///          Converted to Swift with Accelerate by Cursor AI, 2025.
 ///
 //////////////////////////////////////////////////////////////////////
 
 import Foundation
+import Accelerate
 
 func main() {
     print("Parallel Research Kernels")
-    print("Swift Matrix transpose: B = A^T")
+    print("Swift Dense matrix-matrix multiplication: C += A x B (Accelerate BLAS)")
     
     //////////////////////////////////////////////////////////////////////
     /// Read and test input parameters
@@ -62,7 +65,7 @@ func main() {
     let arguments = CommandLine.arguments
     
     guard arguments.count == 3 else {
-        print("Usage: swift transpose.swift <# iterations> <matrix order>")
+        print("Usage: swift dgemm-accelerate.swift <# iterations> <matrix order>")
         exit(1)
     }
     
@@ -80,17 +83,18 @@ func main() {
     print("Matrix order         = \(order)")
     
     //////////////////////////////////////////////////////////////////////
-    // Allocate space for the input and transpose matrix
+    // Allocate space for matrices
     //////////////////////////////////////////////////////////////////////
     
-    // Initialize matrices as 1D arrays for better performance
     var A = Array(repeating: 0.0, count: order * order)
     var B = Array(repeating: 0.0, count: order * order)
+    var C = Array(repeating: 0.0, count: order * order)
     
-    // Initialize matrix A with sequence values
+    // Initialize matrices A and B
     for i in 0..<order {
         for j in 0..<order {
-            A[i * order + j] = Double(i * order + j)
+            A[i * order + j] = Double(i)
+            B[i * order + j] = Double(i)
         }
     }
     
@@ -103,44 +107,56 @@ func main() {
             startTime = CFAbsoluteTimeGetCurrent()
         }
         
-        // Perform matrix transpose: B[i][j] += A[j][i]; A[j][i] += 1.0
-        for i in 0..<order {
-            for j in 0..<order {
-                B[i * order + j] += A[j * order + i]
-                A[j * order + i] += 1.0
+        // Perform matrix multiplication using BLAS: C += A * B
+        // C = alpha * A * B + beta * C
+        // dgemm(TRANSA, TRANSB, M, N, K, ALPHA, A, LDA, B, LDB, BETA, C, LDC)
+        A.withUnsafeBufferPointer { aPtr in
+            B.withUnsafeBufferPointer { bPtr in
+                C.withUnsafeMutableBufferPointer { cPtr in
+                    cblas_dgemm(
+                        CblasRowMajor,          // Layout: row-major
+                        CblasNoTrans,           // TransA: no transpose
+                        CblasNoTrans,           // TransB: no transpose
+                        Int32(order),           // M: rows of A and C
+                        Int32(order),           // N: columns of B and C
+                        Int32(order),           // K: columns of A, rows of B
+                        1.0,                    // alpha: scaling factor for A*B
+                        aPtr.baseAddress,       // A: matrix A
+                        Int32(order),           // lda: leading dimension of A
+                        bPtr.baseAddress,       // B: matrix B
+                        Int32(order),           // ldb: leading dimension of B
+                        1.0,                    // beta: scaling factor for C
+                        cPtr.baseAddress,       // C: matrix C
+                        Int32(order)            // ldc: leading dimension of C
+                    )
+                }
             }
         }
     }
     
-    let transTime = CFAbsoluteTimeGetCurrent() - startTime
+    let dgemmTime = CFAbsoluteTimeGetCurrent() - startTime
     
     //////////////////////////////////////////////////////////////////////
     /// Analyze and output results
     //////////////////////////////////////////////////////////////////////
     
-    // Calculate additive term for validation
-    let addit = Double(iterations * (iterations + 1)) / 2.0
-    var abserr = 0.0
+    // Calculate average time
+    let dgemmAve = dgemmTime / Double(iterations)
     
-    for i in 0..<order {
-        for j in 0..<order {
-            let ij = i * order + j
-            let ji = j * order + i
-            let reference = Double(ij) * Double(iterations + 1) + addit
-            abserr += abs(B[ji] - reference)
-        }
-    }
+    // Calculate checksum
+    let checksum = C.reduce(0.0, +)
+    
+    // Calculate reference checksum
+    let refChecksum = 0.25 * Double(order * order * order) * Double(order - 1) * Double(order - 1) * Double(iterations + 1)
     
     let epsilon = 1.0e-8
-    let nbytes = 2.0 * Double(order * order) * 8.0 // 8 bytes per double, read and write
-    
-    if abserr < epsilon {
+    if abs(checksum - refChecksum) / refChecksum < epsilon {
         print("Solution validates")
-        let avgtime = transTime / Double(iterations)
-        let rate = 1.0e-6 * nbytes / avgtime
-        print(String(format: "Rate (MB/s): %.6f Avg time (s): %.6f", rate, avgtime))
+        let nflops = 2.0 * Double(order * order * order)
+        print("nflops: \(nflops)")
+        print(String(format: "Rate: %.6f Avg time (s): %.6f", 1.0e-6 * nflops / dgemmAve, dgemmAve))
     } else {
-        print("ERROR: Aggregate error \(abserr) exceeds threshold \(epsilon)")
+        print("ERROR: Checksum = \(checksum), Reference checksum = \(refChecksum)")
         print("ERROR: solution did not validate")
         exit(1)
     }
