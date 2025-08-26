@@ -163,7 +163,8 @@ CBLASFLAG=${BLASFLAG}
 # Use appropriate arch or code is compiled to ancient features.
 #NVCC=${NVHPC_CBIN}nvc++
 #NVCC=${NVHPC_CBIN}nvcc
-NVCC=/usr/local/cuda-12/bin/nvcc
+#NVCC=/usr/local/cuda-12/bin/nvcc
+NVCC=nvcc
 CUDAFLAGS=-g -O3 -std=c++20
 CUDAFLAGS+=--extended-lambda
 CUDAFLAGS+=--gpu-architecture=sm_90
