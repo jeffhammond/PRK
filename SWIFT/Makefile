@@ -10,7 +10,7 @@ SWIFTC := swiftc
 SWIFTFLAGS := -O -whole-module-optimization
 
 # Default target
-all: nstream transpose dgemm dgemm-accelerate p2p
+all: nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal
 
 # Build nstream benchmark
 nstream: nstream.swift
@@ -32,8 +32,24 @@ dgemm-accelerate: dgemm-accelerate.swift
 p2p: p2p.swift
 	$(SWIFTC) $(SWIFTFLAGS) -o p2p p2p.swift
 
+# Build Metal GPU benchmarks
+nstream-metal: nstream-metal.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o nstream-metal nstream-metal.swift
+
+transpose-metal: transpose-metal.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o transpose-metal transpose-metal.swift
+
+dgemm-metal: dgemm-metal.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o dgemm-metal dgemm-metal.swift
+
+p2p-metal: p2p-metal.swift
+	$(SWIFTC) $(SWIFTFLAGS) -o p2p-metal p2p-metal.swift
+
 # Run tests with default parameters
 test: test-nstream test-transpose test-dgemm test-dgemm-accelerate test-p2p
+
+# Run Metal GPU tests
+test-metal: test-nstream-metal test-transpose-metal test-dgemm-metal test-p2p-metal
 
 test-nstream: nstream
 	@echo "Testing nstream..."
@@ -54,6 +70,22 @@ test-dgemm-accelerate: dgemm-accelerate
 test-p2p: p2p
 	@echo "Testing p2p..."
 	./p2p 10 100 100
+
+test-nstream-metal: nstream-metal
+	@echo "Testing nstream-metal..."
+	./nstream-metal 10 1000000
+
+test-transpose-metal: transpose-metal
+	@echo "Testing transpose-metal..."
+	./transpose-metal 10 500
+
+test-dgemm-metal: dgemm-metal
+	@echo "Testing dgemm-metal..."
+	./dgemm-metal 10 500
+
+test-p2p-metal: p2p-metal
+	@echo "Testing p2p-metal..."
+	./p2p-metal 10 100 100
 
 # Run benchmarks with larger parameters
 benchmark: benchmark-nstream benchmark-transpose benchmark-dgemm benchmark-dgemm-accelerate benchmark-p2p
@@ -80,7 +112,7 @@ benchmark-p2p: p2p
 
 # Clean build artifacts
 clean:
-	rm -f nstream transpose dgemm dgemm-accelerate p2p
+	rm -f nstream transpose dgemm dgemm-accelerate p2p nstream-metal transpose-metal dgemm-metal p2p-metal
 
 # Install Swift (requires Homebrew)
 install-swift:

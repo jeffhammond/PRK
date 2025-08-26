@@ -457,6 +457,10 @@ SWIFT/transpose
 SWIFT/dgemm
 SWIFT/dgemm-accelerate
 SWIFT/p2p
+SWIFT/nstream-metal
+SWIFT/transpose-metal
+SWIFT/dgemm-metal
+SWIFT/p2p-metal
 dgemm-vector.dSYM
 dgemm.dSYM
 nstream-opencl.dSYM
