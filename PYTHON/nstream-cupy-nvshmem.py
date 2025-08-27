@@ -196,6 +196,8 @@ def main():
 
         # STREAM triad operation on GPU using CuPy operations
         A += B + scalar * C
+        # it seems like this is required to get proper timings - maybe some weird JiT thing happening
+        nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
 
     # Final synchronization
     nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
@@ -243,7 +245,7 @@ def main():
             print('Solution validates')
             avgtime = nstream_time / iterations
             nbytes = 4.0 * total_length * 8  # 8 bytes per double
-            print('Rate (MB/s): ', 1.e-6 * nbytes / avgtime, ' Avg time (s): ', avgtime)
+            print('Rate (GB/s): ', 1.e-9 * nbytes / avgtime, ' Avg time (s): ', avgtime)
 
     # Free NVSHMEM arrays
     nvshmem.free_array(A)
