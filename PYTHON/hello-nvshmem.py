@@ -1,8 +1,8 @@
 import numpy
-import nvshmem.core as nvshmem
 from mpi4py import MPI
 from cuda.core.experimental import Device
 from cuda.core.experimental import system
+import nvshmem.core as nvshmem
 
 # Initialize MPI
 comm = MPI.COMM_WORLD
@@ -10,15 +10,15 @@ me = comm.Get_rank()
 np = comm.Get_size()
 
 # Initialize NVSHMEM with MPI
+dev = Device(me % system.num_devices)
+dev.set_current()
+nvshmem.init(device=dev, mpi_comm=comm, initializer_method="mpi")
+
+#uid = nvshmem.get_unique_id(empty=(me != 0))
+#comm.Bcast(uid._data.view(numpy.int8), root=0)
 #dev = Device()
 #dev.set_current()
-#nvshmem.init(device=dev, mpi_comm=comm, initializer_method="mpi")
-
-uid = nvshmem.get_unique_id(empty=(me != 0))
-comm.Bcast(uid._data.view(numpy.int8), root=0)
-dev = Device()
-dev.set_current()
-nvshmem.init(device=dev, uid=uid, rank=me, nranks=np, initializer_method="uid")
+#nvshmem.init(device=dev, uid=uid, rank=me, nranks=np, initializer_method="uid")
 
 #dev = Device(me % system.num_devices)
 #dev.set_current()
@@ -32,23 +32,24 @@ n_pes = nvshmem.n_pes()
 
 # Allocate symmetric memory
 # array() returns a CuPy NDArray object
-#x = nvshmem.array((1024,), dtype="float32")
-#y = nvshmem.array((1024,), dtype="float32")
+x = nvshmem.array((1024,), dtype="float32")
+y = nvshmem.array((1024,), dtype="float32")
 
 #if my_pe == 0:
 #    y[:] = 1.0
 
 # Perform communication operations
 # Put y from PE 0 into x on PE 1
-#if my_pe == 0:
-#    nvshmem.put(x, y, pe=1, stream=stream)
+if my_pe == 0:
+    nvshmem.put(x, y, 1, stream=stream)
 
 # Synchronize PEs
+nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
 stream.sync()
 
 # Clean up
-#nvshmem.free_array(x)
-#nvshmem.free_array(y)
+nvshmem.free_array(x)
+nvshmem.free_array(y)
 nvshmem.finalize()
 print('OK')
 
