@@ -63,7 +63,7 @@ OCCAFLAGS = -I${OCCADIR}/include -Wl,-rpath -Wl,${OCCADIR}/lib -L${OCCADIR}/lib 
 
 EXTRA=
 ifneq ($(findstring nvc++,$(CXX)),nvc++)
-  EXTRA += ranges stl #pstl tbb # TBB keeps breaking due to API changes
+  EXTRA += stl #pstl ranges tbb # TBB keeps breaking due to API changes
 endif
 ifneq ($(OPENACCFLAG),)
   EXTRA += openacc
@@ -127,7 +127,7 @@ nccl: nstream-nccl transpose-a2a-mpi-nccl transpose-p2p-mpi-nccl
 
 oshmem: transpose-get-oshmem
 
-nvshmem: transpose-get-nvshmem transpose-a2a-nvshmem transpose-ptr-nvshmem
+nvshmem: transpose-get-nvshmem transpose-a2a-nvshmem transpose-ptr-nvshmem transpose-put-nvshmem
 
 hip: nstream-hip transpose-hip stencil-hip nstream-managed-hip
 

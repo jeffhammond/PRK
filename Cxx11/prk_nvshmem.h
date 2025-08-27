@@ -76,13 +76,21 @@ namespace prk {
 
         template <typename T>
         void put(T * dest, const T * source, size_t count, int pe, cudaStream_t stream = 0) {
-            nvshmem_putmem_on_stream(dest, source, count * sizeof(T), pe, stream);
+            nvshmemx_putmem_on_stream(dest, source, count * sizeof(T), pe, stream);
         }
 
         template <typename T>
         void get(T * dest, const T * source, size_t count, int pe, cudaStream_t stream = 0) {
             nvshmemx_getmem_on_stream(dest, source, count * sizeof(T), pe, stream);
         }
+
+#if 0
+        __device__
+        template <typename T>
+        void get(T * dest, const T * source, size_t count, int pe) {
+            nvshmemx_getmem(dest, source, count * sizeof(T), pe);
+        }
+#endif
 
         template <typename T>
         T * allocate(size_t count) {
