@@ -82,6 +82,7 @@ int main(int argc, char * argv[])
 
     int iterations = -1, variant = -1;
     size_t order = 0, block_order = 0;
+    bool perftest = false;
 
     if (me == 0) {
       std::cout << "Parallel Research Kernels" << std::endl;
@@ -124,6 +125,10 @@ int main(int argc, char * argv[])
             throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
           }
         }
+
+        if (argc > 4) {
+            perftest = (bool)std::atoi(argv[4]);
+        }
       }
       catch (const char * e) {
         std::cout << e << std::endl;
@@ -135,11 +140,13 @@ int main(int argc, char * argv[])
       std::cout << "Number of iterations = " << iterations << std::endl;
       std::cout << "Matrix order         = " << order << std::endl;
       std::cout << "Variant              = " << vnames[variant] << std::endl;
+      std::cout << "Performance test     = " << (perftest ? "yes" : "no") << std::endl;
     }
 
     prk::MPI::bcast(&iterations);
     prk::MPI::bcast(&order);
     prk::MPI::bcast(&variant);
+    prk::MPI::bcast(&perftest);
     
     block_order = order / np;
 
@@ -180,6 +187,10 @@ int main(int argc, char * argv[])
     //////////////////////////////////////////////////////////////////////
 
     double trans_time{0};
+    double increment_time{0};
+    double transpose_kernel_time{0};
+    double alltoall_time{0};
+    double total_time{0};
 
     const size_t nelems = order * block_order;
 
@@ -195,12 +206,25 @@ int main(int argc, char * argv[])
     }
 
     //A[order][block_order]
-    double * A = prk::CUDA::malloc_device<double>(nelems);
-    double * B = prk::CUDA::malloc_device<double>(nelems);
-    double * T = prk::CUDA::malloc_device<double>(nelems);
+    double * A = prk::NCCL::allocate<double>(nelems);
+    double * T = prk::NCCL::allocate<double>(nelems);
+    double * B = prk::CUDA::malloc_device<double>(nelems); // not used in comms
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
+
+    // Create CUDA events for profiling kernels
+    cudaEvent_t increment_stop;
+    cudaEvent_t transpose_start, transpose_stop;
+    cudaEvent_t alltoall_start;
+    cudaEvent_t total_start, total_stop;
+    prk::check( cudaEventCreate(&increment_stop) );
+    prk::check( cudaEventCreate(&transpose_start) );
+    prk::check( cudaEventCreate(&transpose_stop) );
+    prk::check( cudaEventCreate(&alltoall_start) );
+    prk::check( cudaEventCreate(&total_start) );
+    prk::check( cudaEventCreate(&total_stop) );
+
     prk::MPI::barrier();
 
     {
@@ -212,6 +236,8 @@ int main(int argc, char * argv[])
             trans_time = prk::wtime();
         }
 
+        prk::check( cudaEventRecord(total_start) );
+        prk::check( cudaEventRecord(alltoall_start) );
         prk::NCCL::alltoall(A, T, block_order*block_order, nccl_comm_world);
 #ifdef DEBUG
         prk::CUDA::sync();
@@ -219,6 +245,7 @@ int main(int argc, char * argv[])
 #endif
 
         // transpose the  matrix  
+        prk::check( cudaEventRecord(transpose_start) );
         if (variant==3) {
             transposeNaiveBulk<<<dimGrid, dimBlock>>>(np, block_order, T, B);
         } else if (variant==4) {
@@ -245,12 +272,40 @@ int main(int argc, char * argv[])
               }
             }
         }
+        prk::check( cudaEventRecord(transpose_stop) );
         // increment A
-        cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
+        if (!perftest) {
+            cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
+            prk::check( cudaEventRecord(increment_stop) );
+        }
+        prk::check( cudaEventRecord(total_stop) );
       }
       prk::CUDA::sync();
       prk::MPI::barrier();
       trans_time = prk::wtime() - trans_time;
+
+      // Calculate kernel times
+      prk::check( cudaEventSynchronize(transpose_start) );
+      float alltoall_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&alltoall_milliseconds, alltoall_start, transpose_start) );
+      alltoall_time = alltoall_milliseconds / 1000.0; // Convert to seconds
+
+      prk::check( cudaEventSynchronize(transpose_stop) );
+      float transpose_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&transpose_milliseconds, transpose_start, transpose_stop) );
+      transpose_kernel_time = transpose_milliseconds / 1000.0; // Convert to seconds
+
+      if (!perftest) {
+          prk::check( cudaEventSynchronize(increment_stop) );
+          float increment_milliseconds = 0;
+          prk::check( cudaEventElapsedTime(&increment_milliseconds, transpose_stop, increment_stop) );
+          increment_time = increment_milliseconds / 1000.0; // Convert to seconds
+      }
+
+      prk::check( cudaEventSynchronize(total_stop) );
+      float total_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&total_milliseconds, total_start, total_stop) );
+      total_time = total_milliseconds / 1000.0; // Convert to seconds
     }
 
     prk::CUDA::copyD2H(h_B, B, nelems);
@@ -262,9 +317,17 @@ int main(int argc, char * argv[])
 
     prk::check( ncclCommDestroy(nccl_comm_world) );
 
-    prk::CUDA::free(A);
+    // Clean up CUDA events
+    prk::check( cudaEventDestroy(increment_stop) );
+    prk::check( cudaEventDestroy(transpose_start) );
+    prk::check( cudaEventDestroy(transpose_stop) );
+    prk::check( cudaEventDestroy(alltoall_start) );
+    prk::check( cudaEventDestroy(total_start) );
+    prk::check( cudaEventDestroy(total_stop) );
+
+    prk::NCCL::free(A);
+    prk::NCCL::free(T);
     prk::CUDA::free(B);
-    prk::CUDA::free(T);
 
     prk::CUDA::free_host(h_A);
 
@@ -290,12 +353,19 @@ int main(int argc, char * argv[])
 
     if (me == 0) {
       const auto epsilon = 1.0e-8;
-      if (abserr < epsilon) {
-        std::cout << "Solution validates" << std::endl;
+      if (abserr < epsilon || perftest) {
+        std::cout << (perftest ? "Validation skipped" : "Solution validates") << std::endl;
         auto avgtime = trans_time/iterations;
         auto bytes = (size_t)order * (size_t)order * sizeof(double);
-        std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+        auto scaling = (perftest ? 3.0 : 4.0);
+        std::cout << "Rate (MB/s): " << 1.0e-6 * (scaling*bytes)/avgtime
                   << " Avg time (s): " << avgtime << std::endl;
+        std::cout << "Alltoall total time (s): " << alltoall_time << std::endl;
+        std::cout << "Transpose kernel total time (s): " << transpose_kernel_time << std::endl;
+        if (!perftest) {
+            std::cout << "Increment kernel total time (s): " << increment_time << std::endl;
+        }
+        std::cout << "Total kernel total time (s): " << total_time << std::endl;
       } else {
         std::cout << "ERROR: Aggregate squared error " << abserr
                   << " exceeds threshold " << epsilon << std::endl;

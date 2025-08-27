@@ -58,9 +58,7 @@
 #include "prk_cuda.h"
 #include "transpose-kernel.h"
 
-const std::array<std::string,7> vnames = {"naive", "coalesced", "no bank conflicts",
-                                          "bulk naive", "bulk coalesced", "bulk no bank conflicts",
-                                          "debug"};
+const std::array<std::string,3> vnames = {"naive", "coalesced", "no bank conflicts"};
 
 int main(int argc, char * argv[])
 {
@@ -79,17 +77,18 @@ int main(int argc, char * argv[])
 
     int iterations = -1, variant = -1;
     size_t order = 0, block_order = 0;
+    bool on_device = true;
 
     if (me == 0) {
       std::cout << "Parallel Research Kernels" << std::endl;
-      std::cout << "C++11/NVSHMEM Matrix transpose: B = A^T" << std::endl;
+      std::cout << "C++11/NVSHMEM Matrix transpose (PUT-based): B = A^T" << std::endl;
     }
 
     // do this on every PE to avoid needing a host broadcast
     {
       try {
         if (argc < 3) {
-          throw "Usage: <# iterations> <matrix order> [variant (0-6)]";
+          throw "Usage: <# iterations> <matrix order> [variant (0-2)]";
         }
 
         iterations  = std::atoi(argv[1]);
@@ -105,21 +104,21 @@ int main(int argc, char * argv[])
           throw "ERROR: Matrix order must be an integer multiple of the number of MPI processes";
         }
 
-        variant = 5; // bulk transposeNoBankConflicts
+        variant = 2; // transposeNoBankConflicts
         if (argc > 3) {
             variant = std::atoi(argv[3]);
         }
-        if (variant < 0 || variant > 6) {
-            throw "Please select a valid variant (0: naive 1: coalesced, 2: no bank conflicts, 3-5: bulk..., 6: debug)";
+        if (variant < 0 || variant > 2) {
+            throw "Please select a valid variant (0: naive 1: coalesced, 2: no bank conflicts)";
         }
 
         block_order = order / np;
+        if (block_order % tile_dim) {
+          throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
+        }
 
-        // debug variant doesn't care
-        if (variant != 6) {
-          if (block_order % tile_dim) {
-            throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
-          }
+        if (argc > 4) {
+            on_device = (0 != std::atoi(argv[4]));
         }
       }
       catch (const char * e) {
@@ -134,15 +133,11 @@ int main(int argc, char * argv[])
       std::cout << "Number of iterations = " << iterations << std::endl;
       std::cout << "Matrix order         = " << order << std::endl;
       std::cout << "Variant              = " << vnames[variant] << std::endl;
+      std::cout << "Device-initiated     = " << (on_device ? "true" : "false") << std::endl;
     }
 
     // for B += T.T
-    int dimz = 1;
-    // parallelize over z in bulk version
-    if (3 <= variant && variant <= 5) {
-        dimz = np;
-    }
-    dim3 dimGrid(block_order/tile_dim, block_order/tile_dim, dimz);
+    dim3 dimGrid(block_order/tile_dim, block_order/tile_dim, 1);
     dim3 dimBlock(tile_dim, block_rows, 1);
     info.checkDims(dimBlock, dimGrid);
 
@@ -150,45 +145,8 @@ int main(int argc, char * argv[])
     const int threads_per_block = 256;
     const int blocks_per_grid = (order * block_order + threads_per_block - 1) / threads_per_block;
 
-    //std::cout << "@" << me << " order=" << order << " block_order=" << block_order << std::endl;
-
     const int num_gpus = info.num_gpus();
     info.set_gpu(me % num_gpus);
-
-#if 0
-    if (me == 0)
-    {
-        void** args = nullptr; // unused by implementation
-        int gridsize = -911;
-        size_t sm_size = 0;
-
-        const int blockSize = dimBlock.x * dimBlock.y * dimBlock.z;
-        prk::check( cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gridsize, (const void*)transposeNaive, blockSize, sm_size) );
-        std::cout << "transposeNaive: CUDA gridsize = " << gridsize << std::endl;
-
-        int sm_count = -911;
-        prk::check( cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, info.get_gpu()) );
-        std::cout << "SM count = " << sm_count << std::endl;
-
-        prk::check( (cudaError_t)nvshmemx_collective_launch_query_gridsize((const void*)transposeNaive,
-                                                                           dimBlock, args, sm_size, &gridsize) );
-        std::cout << "transposeNaive: NVSHMEM gridsize = " << gridsize << std::endl;
-
-        sm_size = tile_dim * tile_dim * sizeof(double);
-        prk::check( (cudaError_t)nvshmemx_collective_launch_query_gridsize((const void*)transposeCoalesced,
-                                                                           dimBlock, args, sm_size, &gridsize) );
-        std::cout << "transposeCoalesced: NVSHMEM gridsize = " << gridsize << std::endl;
-
-        sm_size = tile_dim * (tile_dim+1) * sizeof(double);
-        prk::check( (cudaError_t)nvshmemx_collective_launch_query_gridsize((const void*)transposeNoBankConflict,
-                                                                           dimBlock, args, sm_size, &gridsize) );
-        std::cout << "transposeNoBankConflict: NVSHMEM gridsize = " << gridsize << std::endl;
-
-        prk::check( (cudaError_t)nvshmemx_collective_launch_query_gridsize((const void*)cuda_increment,
-                                                                           threads_per_block, args, 0, &gridsize) );
-        std::cout << "cuda_increment: NVSHMEM gridsize = " << gridsize << std::endl;
-    }
-#endif
 
     //////////////////////////////////////////////////////////////////////
     // Allocate space for the input and transpose matrix
@@ -197,7 +155,6 @@ int main(int argc, char * argv[])
     double trans_time{0};
     double increment_time{0};
     double transpose_kernel_time{0};
-    double alltoall_time{0};
     double total_time{0};
 
     const size_t nelems = order * block_order;
@@ -215,21 +172,19 @@ int main(int argc, char * argv[])
 
     //A[order][block_order]
     double * A = prk::NVSHMEM::allocate<double>(nelems);
-    double * T = prk::NVSHMEM::allocate<double>(nelems);
-    double * B = prk::CUDA::malloc_device<double>(nelems);
+    double * B = prk::NVSHMEM::allocate<double>(nelems);  // B must be symmetric for PUT operations
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
 
     // Create CUDA events for profiling kernels
-    cudaEvent_t increment_stop;
+    cudaEvent_t increment_start, increment_stop;
     cudaEvent_t transpose_start, transpose_stop;
-    cudaEvent_t alltoall_start;
     cudaEvent_t total_start, total_stop;
+    prk::check( cudaEventCreate(&increment_start) );
     prk::check( cudaEventCreate(&increment_stop) );
     prk::check( cudaEventCreate(&transpose_start) );
     prk::check( cudaEventCreate(&transpose_stop) );
-    prk::check( cudaEventCreate(&alltoall_start) );
     prk::check( cudaEventCreate(&total_start) );
     prk::check( cudaEventCreate(&total_stop) );
 
@@ -244,59 +199,71 @@ int main(int argc, char * argv[])
             trans_time = prk::wtime();
         }
 
-        // Before any PE calls a nvshmem_alltoall routine, the following conditions must be ensured:
-        // The dest data object on all PEs in the active set is ready to accept the nvshmem_alltoall data.
-        // i.e. only T needs to be ready, not A.
         prk::check( cudaEventRecord(total_start) );
-        // we need to synchronize T before the all-to-all happens
-        prk::NVSHMEM::barrier(false);
-        prk::check( cudaEventRecord(alltoall_start) );
-        prk::NVSHMEM::alltoall(T, A, block_order*block_order);
-
-        // transpose the  matrix  
         prk::check( cudaEventRecord(transpose_start) );
-        if (variant==3) {
-            transposeNaiveBulk<<<dimGrid, dimBlock>>>(np, block_order, T, B);
-        } else if (variant==4) {
-            transposeCoalescedBulk<<<dimGrid, dimBlock>>>(np, block_order, T, B);
-        } else if (variant==5) {
-            transposeNoBankConflictBulk<<<dimGrid, dimBlock>>>(np, block_order, T, B);
+        if (on_device) {
+            // Device-initiated PUT-based transpose
+            transpose_nvshmem_put<<<dimGrid, dimBlock>>>(variant, block_order*block_order, me, np,
+                                                         block_order, A, B);
         } else {
-            for (int r=0; r<np; r++) {
-              const size_t offset = block_order * block_order * r;
-              if (variant==6) {
-                  // debug
-                  const int threads_per_block = 16;
-                  const int blocks_per_grid = (block_order + threads_per_block - 1) / threads_per_block;
-                  dim3 dimBlock(threads_per_block, threads_per_block, 1);
-                  dim3 dimGrid(blocks_per_grid, blocks_per_grid, 1);
-                  transposeSimple<<<dimGrid, dimBlock>>>(block_order, T + offset, B + offset);
-                  //prk::CUDA::sync();
-              } else if (variant==0) {
-                  transposeNaive<<<dimGrid, dimBlock>>>(block_order, T + offset, B + offset);
-              } else if (variant==1) {
-                  transposeCoalesced<<<dimGrid, dimBlock>>>(block_order, T + offset, B + offset);
-              } else if (variant==2) {
-                  transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, T + offset, B + offset);
-              }
+            // Host-initiated PUT-based transpose following SHMEM pattern
+            
+            // Phase 0: local transpose
+            size_t offset = block_order * block_order * me;
+            if (variant==0) {
+                transposeNaive<<<dimGrid, dimBlock>>>(block_order, A + offset, B + offset);
+            } else if (variant==1) {
+                transposeCoalesced<<<dimGrid, dimBlock>>>(block_order, A + offset, B + offset);
+            } else if (variant==2) {
+                transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, A + offset, B + offset);
+            }
+            prk::CUDA::sync();
+            
+            // Phases 1 to np-1: remote communication
+            for (int phase = 1; phase < np; phase++) {
+                const int send_to = (me - phase + np) % np;
+                const int recv_from = (me + phase) % np;
+                
+                // Create temporary workspace for transpose
+                double * T = prk::NVSHMEM::allocate<double>(block_order * block_order);
+                
+                // Source and destination offsets
+                size_t soffset = block_order * block_order * send_to;
+                size_t roffset = block_order * block_order * recv_from;
+                
+                // Transpose local block to temporary buffer
+                if (variant==0) {
+                    transposeNaive<<<dimGrid, dimBlock>>>(block_order, A + soffset, T);
+                } else if (variant==1) {
+                    transposeCoalesced<<<dimGrid, dimBlock>>>(block_order, A + soffset, T);
+                } else if (variant==2) {
+                    transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, A + soffset, T);
+                }
+                prk::CUDA::sync();
+                
+                // PUT the transposed block to remote PE
+                prk::NVSHMEM::put(B + roffset, T, block_order * block_order, recv_from);
+                
+                prk::NVSHMEM::free(T);
+                
+                // Synchronize between phases
+                prk::NVSHMEM::barrier(false);
             }
         }
         prk::check( cudaEventRecord(transpose_stop) );
+        prk::NVSHMEM::barrier(false);
+
         // increment A
+        prk::check( cudaEventRecord(increment_start) );
         cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
         prk::check( cudaEventRecord(increment_stop) );
+        prk::NVSHMEM::barrier(false);
         prk::check( cudaEventRecord(total_stop) );
       }
-      //prk::NVSHMEM::barrier(false);
       prk::CUDA::sync();
       trans_time = prk::wtime() - trans_time;
 
       // Calculate kernel times
-      prk::check( cudaEventSynchronize(transpose_start) );
-      float alltoall_milliseconds = 0;
-      prk::check( cudaEventElapsedTime(&alltoall_milliseconds, alltoall_start, transpose_start) );
-      alltoall_time = alltoall_milliseconds / 1000.0; // Convert to seconds
-
       prk::check( cudaEventSynchronize(transpose_stop) );
       float transpose_milliseconds = 0;
       prk::check( cudaEventElapsedTime(&transpose_milliseconds, transpose_start, transpose_stop) );
@@ -304,7 +271,7 @@ int main(int argc, char * argv[])
 
       prk::check( cudaEventSynchronize(increment_stop) );
       float increment_milliseconds = 0;
-      prk::check( cudaEventElapsedTime(&increment_milliseconds, transpose_stop, increment_stop) );
+      prk::check( cudaEventElapsedTime(&increment_milliseconds, increment_start, increment_stop) );
       increment_time = increment_milliseconds / 1000.0; // Convert to seconds
 
       prk::check( cudaEventSynchronize(total_stop) );
@@ -314,23 +281,17 @@ int main(int argc, char * argv[])
     }
 
     prk::CUDA::copyD2H(h_B, B, nelems);
-#ifdef DEBUG
-    prk::CUDA::copyD2H(h_A, A, order * block_order);
-    prk::NVSHMEM::print_matrix(h_A, order, block_order, "A@" + std::to_string(me));
-    prk::NVSHMEM::print_matrix(h_B, order, block_order, "B@" + std::to_string(me));
-#endif
 
     // Clean up CUDA events
+    prk::check( cudaEventDestroy(increment_start) );
     prk::check( cudaEventDestroy(increment_stop) );
     prk::check( cudaEventDestroy(transpose_start) );
     prk::check( cudaEventDestroy(transpose_stop) );
-    prk::check( cudaEventDestroy(alltoall_start) );
     prk::check( cudaEventDestroy(total_start) );
     prk::check( cudaEventDestroy(total_stop) );
 
     prk::NVSHMEM::free(A);
-    prk::NVSHMEM::free(T);
-    prk::CUDA::free(B);
+    prk::NVSHMEM::free(B);
 
     prk::CUDA::free_host(h_A);
 
@@ -346,7 +307,6 @@ int main(int argc, char * argv[])
         abserr += prk::abs(h_B[i*block_order+j] - temp);
       }
     }
-    //abserr = prk::NVSHMEM::sum(abserr);
 
     const auto epsilon = 1.0e-8;
     if (abserr > epsilon) {
@@ -367,8 +327,7 @@ int main(int argc, char * argv[])
         auto bytes = (size_t)order * (size_t)order * sizeof(double);
         std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
                   << " Avg time (s): " << avgtime << std::endl;
-        std::cout << "Alltoall total time (s): " << alltoall_time << std::endl;
-        std::cout << "Transpose kernel total time (s): " << transpose_kernel_time << std::endl;
+        std::cout << "Transpose+put kernel total time (s): " << transpose_kernel_time << std::endl;
         std::cout << "Increment kernel total time (s): " << increment_time << std::endl;
         std::cout << "Total kernel total time (s): " << total_time << std::endl;
       } else {
