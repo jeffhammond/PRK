@@ -75,35 +75,37 @@ from mpi4py import MPI
 
 import cupy
 
-print('=== CUDA Version Information ===')
+if False:
+    print('=== CUDA Version Information ===')
 
-try:
-    # Get CUDA runtime version
-    runtime_version = cupy.cuda.runtime.runtimeGetVersion()
-    runtime_major = runtime_version // 1000
-    runtime_minor = (runtime_version % 1000) // 10
-    print(f'CUDA Runtime Version: {runtime_major}.{runtime_minor} (raw: {runtime_version})')
-    
-    # Get CUDA driver version  
-    driver_version = cupy.cuda.runtime.driverGetVersion()
-    driver_major = driver_version // 1000
-    driver_minor = (driver_version % 1000) // 10
-    print(f'CUDA Driver Version: {driver_major}.{driver_minor} (raw: {driver_version})')
-    
-    print(f'Version compatibility: Driver {driver_major}.{driver_minor} vs Runtime {runtime_major}.{runtime_minor}')
-    
-    if driver_version < runtime_version:
-        print('WARNING: Driver version is older than runtime version!')
-        print('This can cause \"cudaErrorInsufficientDriver\" errors.')
-        print('Consider updating your NVIDIA drivers.')
-    else:
-        print('Driver and runtime versions are compatible.')
+    try:
+        # Get CUDA runtime version
+        runtime_version = cupy.cuda.runtime.runtimeGetVersion()
+        runtime_major = runtime_version // 1000
+        runtime_minor = (runtime_version % 1000) // 10
+        print(f'CUDA Runtime Version: {runtime_major}.{runtime_minor} (raw: {runtime_version})')
         
-except Exception as e:
-    print(f'Error: {e}')
+        # Get CUDA driver version  
+        driver_version = cupy.cuda.runtime.driverGetVersion()
+        driver_major = driver_version // 1000
+        driver_minor = (driver_version % 1000) // 10
+        print(f'CUDA Driver Version: {driver_major}.{driver_minor} (raw: {driver_version})')
+        
+        print(f'Version compatibility: Driver {driver_major}.{driver_minor} vs Runtime {runtime_major}.{runtime_minor}')
+        
+        if driver_version < runtime_version:
+            print('WARNING: Driver version is older than runtime version!')
+            print('This can cause \"cudaErrorInsufficientDriver\" errors.')
+            print('Consider updating your NVIDIA drivers.')
+        else:
+            print('Driver and runtime versions are compatible.')
+            
+    except Exception as e:
+        print(f'Error: {e}')
     print('This usually indicates CUDA driver/runtime compatibility issues.')
 
 from cuda.core.experimental import Device
+from cuda.core.experimental import system
 
 import nvshmem.core as nvshmem
 
@@ -111,7 +113,7 @@ def main():
     
     # Initialize MPI and CUDA device
     comm = MPI.COMM_WORLD
-    local_rank = comm.Get_rank() % 8  # Assume max 8 GPUs per node
+    local_rank = comm.Get_rank() % system.num_devices
     device = Device(local_rank)
     device.set_current()
     stream = device.create_stream()
@@ -165,8 +167,8 @@ def main():
         print('Local vector length  = ', length)
 
     # Barrier using NVSHMEM
-    nvshmem.barrier(stream=stream)
-    stream.synchronize()
+    nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
+    stream.sync()
 
     # ********************************************************************
     # ** Allocate space for the input and execute STREAM triad
@@ -188,16 +190,16 @@ def main():
     for k in range(0, iterations+1):
 
         if k < 1:
-            nvshmem.barrier(stream=stream)
-            stream.synchronize()
+            nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
+            stream.sync()
             t0 = timer()
 
         # STREAM triad operation on GPU using CuPy operations
         A += B + scalar * C
 
     # Final synchronization
-    nvshmem.barrier(stream=stream)
-    stream.synchronize()
+    nvshmem.barrier(nvshmem.Teams.TEAM_WORLD,stream=stream)
+    stream.sync()
     t1 = timer()
     nstream_time = t1 - t0
 
@@ -224,8 +226,8 @@ def main():
     dst[0] = 0.0
     
     # Reduce across all PEs using NVSHMEM collective
-    nvshmem.reduce(dst, src, "sum", stream=stream)
-    stream.synchronize()
+    nvshmem.reduce(nvshmem.Teams.TEAM_WORLD, dst, src, op="sum", stream=stream)
+    stream.sync()
     
     asum_global = float(dst[0])
 
