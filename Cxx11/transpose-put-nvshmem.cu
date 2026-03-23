@@ -173,6 +173,7 @@ int main(int argc, char * argv[])
     //A[order][block_order]
     double * A = prk::NVSHMEM::allocate<double>(nelems);
     double * B = prk::NVSHMEM::allocate<double>(nelems);  // B must be symmetric for PUT operations
+    double * T = prk::NVSHMEM::allocate<double>(block_order * block_order);  // host-initiated transpose workspace
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
@@ -223,10 +224,7 @@ int main(int argc, char * argv[])
             for (int phase = 1; phase < np; phase++) {
                 const int send_to = (me - phase + np) % np;
                 const int recv_from = (me + phase) % np;
-                
-                // Create temporary workspace for transpose
-                double * T = prk::NVSHMEM::allocate<double>(block_order * block_order);
-                
+
                 // Source and destination offsets
                 size_t soffset = block_order * block_order * send_to;
                 size_t roffset = block_order * block_order * recv_from;
@@ -243,9 +241,7 @@ int main(int argc, char * argv[])
                 
                 // PUT the transposed block to remote PE
                 prk::NVSHMEM::put(B + roffset, T, block_order * block_order, recv_from);
-                
-                prk::NVSHMEM::free(T);
-                
+
                 // Synchronize between phases
                 prk::NVSHMEM::barrier(false);
             }
@@ -292,6 +288,7 @@ int main(int argc, char * argv[])
 
     prk::NVSHMEM::free(A);
     prk::NVSHMEM::free(B);
+    prk::NVSHMEM::free(T);
 
     prk::CUDA::free_host(h_A);
 
