@@ -174,6 +174,7 @@ int main(int argc, char * argv[])
     double * A = prk::NVSHMEM::allocate<double>(nelems);
     double * B = prk::NVSHMEM::allocate<double>(nelems);  // B must be symmetric for PUT operations
     double * T = prk::NVSHMEM::allocate<double>(block_order * block_order);  // host-initiated transpose workspace
+    uint64_t * S = prk::NVSHMEM::allocate<uint64_t>(np);  // symmetric signal buffer
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
@@ -289,6 +290,7 @@ int main(int argc, char * argv[])
     prk::NVSHMEM::free(A);
     prk::NVSHMEM::free(B);
     prk::NVSHMEM::free(T);
+    prk::NVSHMEM::free(S);
 
     prk::CUDA::free_host(h_A);
 

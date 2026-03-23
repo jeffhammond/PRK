@@ -80,6 +80,11 @@ namespace prk {
         }
 
         template <typename T>
+        void put_signal_increment(T * dest, const T * source, size_t count, uint64_t * sig_addr, int pe, cudaStream_t stream = 0) {
+            nvshmemx_putmem_signal_on_stream(dest, source, count * sizeof(T), sig_addr, 1, NVSHMEM_SIGNAL_ADD, pe, stream);
+        }
+
+        template <typename T>
         void get(T * dest, const T * source, size_t count, int pe, cudaStream_t stream = 0) {
             nvshmemx_getmem_on_stream(dest, source, count * sizeof(T), pe, stream);
         }
