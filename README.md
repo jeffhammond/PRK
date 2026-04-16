@@ -109,14 +109,25 @@ f = see footnotes
 | HIP                  |  i  |    y    |     y     |    y    |        |       |     |
 | HIPBLAS              |     |         |     y     |    y    |        |   y   |     |
 | CBLAS                |     |         |     y     |         |        |   y   |     |
-| OpenACC              |  y  |         |           |         |        |       |     |
-| MPI (RMA)            |     |         |           |    y    |        |       |     |
+| OpenACC              |  y  |    y    |     y     |    y    |        |       |     |
+| MPI (RMA)            |     |    y    |     y     |    y    |        |   y   |     |
+| stdpar               |     |         |     y     |    y    |        |       |     |
+| CUDAStF              |  y  |    y    |     y     |         |        |   y   |     |
+| C++ Ranges           |     |    y    |     y     |    y    |        |       |     |
+| NVSHMEM              |     |         |     y     |         |        |       |     |
+| NCCL                 |     |         |     y     |    y    |        |       |     |
+| OCCA                 |     |         |     y     |    y    |        |       |     |
+| HPX                  |     |         |           |    y    |        |       |     |
+| oneDPL               |     |         |           |    y    |        |       |     |
+| UPC++                |     |         |           |    y    |        |       |     |
 
 * [SYCL](http://sycl.tech/)
 * [Boost.Compute](http://boostorg.github.io/compute/)
 * [TBB](https://www.threadingbuildingblocks.org/)
 * [Kokkos](https://github.com/kokkos/kokkos)
 * [RAJA](https://github.com/LLNL/RAJA)
+
+Single-precision (`sgemm`) and mixed-precision (`xgemm`) GEMM variants are also available for the CBLAS, CUBLAS, HIPBLAS, and oneMKL backends.
 
 ## Modern C
 
@@ -141,16 +152,19 @@ for testing novel memory systems, including persistent memory.
 
 ## Modern Fortran
 
-| Parallelism          | p2p | stencil | transpose | nstream | sparse | dgemm |
-|----------------------|-----|---------|-----------|---------|--------|-------|
-| None                 |  y  |    y    |     y     |    y    |        |   y   |
-| Intrinsics           |     |         |     y     |    y    |        |   y   |
-| coarrays             |  y  |    y    |     y     |         |        |       |
-| Global Arrays        |     |         |     y     |    y    |        |       |
-| OpenMP               |  y  |    y    |     y     |    y    |        |   y   |
-| OpenMP tasks         |  y  |    y    |     y     |    y    |        |       |
-| OpenMP target        |  y  |    y    |     y     |    y    |        |       |
-| OpenACC              |     |    y    |     y     |    y    |        |       |
+| Parallelism          | p2p | stencil | transpose | nstream | sparse | dgemm | PIC |
+|----------------------|-----|---------|-----------|---------|--------|-------|-----|
+| None                 |  y  |    y    |     y     |    y    |        |   y   |  y  |
+| Intrinsics           |     |         |     y     |    y    |        |   y   |     |
+| coarrays             |  y  |    y    |     y     |         |        |       |     |
+| Global Arrays        |     |         |     y     |    y    |        |   y   |     |
+| OpenMP               |  y  |    y    |     y     |    y    |        |   y   |  y  |
+| OpenMP tasks         |  y  |    y    |     y     |    y    |        |   y   |     |
+| OpenMP target        |  y  |    y    |     y     |    y    |        |   y   |     |
+| OpenACC              |  y  |    y    |     y     |    y    |        |       |     |
+| stdpar               |     |    y    |     y     |    y    |        |   y   |     |
+| CUDA Fortran         |     |         |     y     |    y    |        |       |     |
+| MPI                  |     |         |     y     |    y    |        |       |     |
 
 By intrinsics, we mean the language built-in features, such as colon notation or the `TRANSPOSE` intrinsic.
 We use `DO CONCURRENT` in a few places.
@@ -163,7 +177,10 @@ x = externally supported (in the Chapel repo)
 |----------------------|-----|---------|-----------|---------|--------|-------|
 | Python 3             |  y  |    y    |     y     |    y    |    y   |   y   |
 | Python 3 w/ Numpy    |  y  |    y    |     y     |    y    |    y   |   y   |
-| Python 3 w/ mpi4py   |     |    y    |     y     |    y    |        |       |
+| Python 3 w/ mpi4py   |  y  |    y    |     y     |    y    |        |       |
+| Python 3 w/ Numba    |  y  |    y    |     y     |    y    |        |       |
+| Python 3 w/ CuPy     |     |    y    |     y     |    y    |        |       |
+| Python 3 w/ OpenSHMEM|  y  |    y    |     y     |    y    |        |       |
 | Julia                |  y  |    y    |     y     |    y    |        |   y   |
 | Octave (Matlab)      |  y  |    y    |     y     |         |        |       |
 | Rust                 |  y  |    y    |     y     |         |        |       |

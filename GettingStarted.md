@@ -57,6 +57,10 @@ Compilers that do not support standards can cause problems.
 Please look at `common/make.defs.${toolchain}` to see if your
 programming environment is supported.
 
+For GPU targets: use `make.defs.nvhpc` (NVIDIA HPC SDK — supports CUDA, OpenACC, OpenMP target,
+and `stdpar`), `make.defs.cuda` (GCC + NVCC), or `make.defs.hip` (AMD HIP/ROCm).
+For Intel GPUs and SYCL, use `make.defs.oneapi` or `make.defs.llvm`.
+
 ### Other dependencies
 
 Python and Octave implementations require the appropriate environment.
@@ -64,10 +68,10 @@ We won't try to document that here since there is great documentation
 online for whatever platform you are using.
 
 All of the libraries and frameworks supported by the PRK project
-can be installed using the Travis CI infrastructure.
+can be installed using the scripts in the `ci/` directory.
 See `ci/install-${dependency}.sh` for details and look
 at how the script is invoked by `ci/install-deps.sh` to
-undestand the options.
+understand the options.
 In many cases, the only required argument is the path to the
 target directory.  We often use `${PRK}/deps/` for this.
 
@@ -100,7 +104,8 @@ the answer is correct.
 Here is an example:
 
 1) Select the GCC toolchain: `cp common/make.defs.gcc common/make.defs`.
-2) Compile stuff: `make -j``nproc`` -k`.
+2) Compile stuff: `make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu) -k`.
+   (The `-k` flag means "keep going" — not all backends will be available on every system, and that is expected.)
 3) Run something simple:
 ```
 $ ./C1z/nstream 10 100000000
@@ -111,6 +116,16 @@ Vector length        = 100000000
 Solution validates
 Rate (MB/s): 27243.009853 Avg time (s): 0.117461
 ```
+
+To run the functional test suite after building:
+```sh
+./scripts/small/runall
+```
+For tests that exercise larger memory footprints:
+```sh
+./scripts/wide/runall
+```
+Individual model suites are also available, e.g., `./scripts/small/runopenmp` or `./scripts/small/runmpi1`.
 
 ## Performance
 
