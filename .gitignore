@@ -490,3 +490,11 @@ transpose-thread.dSYM
 transpose-valarray.dSYM
 transpose-vector.dSYM
 transpose.dSYM
+
+# CMake
+/build/
+/build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
