@@ -89,6 +89,20 @@ jobs:
       - name: Install dependencies
         run: sh ./ci/install-deps.sh "${CI_ROOT}" ${{ matrix.target }}
 
+      - name: Provide stable LLVM/OpenMP paths on Linux
+        if: runner.os == 'Linux' && matrix.compiler == 'clang'
+        run: |
+          # ci/build-run-prk.sh historically expects LLVM 8 under this path,
+          # but ubuntu-latest no longer ships that versioned directory.
+          sudo apt-get install -y clang libomp-dev
+          LLVM_BIN="$(dirname "$(command -v clang)")"
+          LLVM_LIB="$(find /usr/lib /usr/lib/llvm-* -type f -name 'libomp.so*' -printf '%h\n' 2>/dev/null | head -n 1)"
+          test -n "${LLVM_LIB}"
+          sudo mkdir -p /usr/lib/llvm-8/bin /usr/lib/llvm-8/lib
+          sudo ln -sf "${LLVM_BIN}/clang" /usr/lib/llvm-8/bin/clang
+          sudo ln -sf "${LLVM_LIB}"/libomp.so* /usr/lib/llvm-8/lib/ 2>/dev/null || true
+          test -e /usr/lib/llvm-8/lib/libomp.so
+
       - name: Build and run
         run: sh ./ci/build-run-prk.sh "${CI_ROOT}" ${{ matrix.target }}
 
