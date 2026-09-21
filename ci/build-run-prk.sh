@@ -700,7 +700,7 @@ case "$PRK_TARGET" in
         echo "OFFLOADFLAG+=-DGPU_SCHEDULE=\"\"" >> common/make.defs
 
         # Serial
-        ${MAKE} -C ${PRK_TARGET_PATH} p2p p2p-innerloop stencil transpose nstream dgemm
+        ${MAKE} -C ${PRK_TARGET_PATH} -f Makefile.legacy p2p p2p-innerloop stencil transpose nstream dgemm
         $PRK_TARGET_PATH/p2p               10 1024 1024
         $PRK_TARGET_PATH/p2p-innerloop     10 1024
         $PRK_TARGET_PATH/stencil           10 1000
@@ -711,7 +711,7 @@ case "$PRK_TARGET" in
         $PRK_TARGET_PATH/dgemm             10 400 32
 
         # Pretty
-        ${MAKE} -C ${PRK_TARGET_PATH} stencil-pretty transpose-pretty nstream-pretty dgemm-pretty
+        ${MAKE} -C ${PRK_TARGET_PATH} -f Makefile.legacy stencil-pretty transpose-pretty nstream-pretty dgemm-pretty
         #$PRK_TARGET_PATH/p2p-pretty          10 1024 1024
         # pretty versions do not support tiling...
         $PRK_TARGET_PATH/stencil-pretty      10 1000
@@ -720,7 +720,7 @@ case "$PRK_TARGET" in
         $PRK_TARGET_PATH/dgemm-pretty        10 400
 
         # OpenMP host
-        ${MAKE} -C ${PRK_TARGET_PATH} p2p-tasks-openmp p2p-innerloop-openmp stencil-openmp transpose-openmp \
+        ${MAKE} -C ${PRK_TARGET_PATH} -f Makefile.legacy p2p-tasks-openmp p2p-innerloop-openmp stencil-openmp transpose-openmp \
                                    nstream-openmp dgemm-openmp
         export OMP_NUM_THREADS=2
         $PRK_TARGET_PATH/p2p-tasks-openmp     10 1024 1024
@@ -735,7 +735,7 @@ case "$PRK_TARGET" in
 
         # OpenMP target
         if [ "${CC}" = "gcc" ] ; then
-            ${MAKE} -C ${PRK_TARGET_PATH} stencil-openmp-target transpose-openmp-target nstream-openmp-target
+            ${MAKE} -C ${PRK_TARGET_PATH} -f Makefile.legacy stencil-openmp-target transpose-openmp-target nstream-openmp-target
             export OMP_NUM_THREADS=2
             #$PRK_TARGET_PATH/p2p-openmp-target           10 1024 1024 # most compilers do not support doacross yet
             $PRK_TARGET_PATH/stencil-openmp-target       10 1000
@@ -747,7 +747,7 @@ case "$PRK_TARGET" in
         # Fortran coarrays
         # Disable GCC Linux because installing OpenCoarrays is not working
         if [ "${CC}" = "gcc" ] && [ "$os" = "Darwin" ] ; then
-            ${MAKE} -C ${PRK_TARGET_PATH} coarray
+            ${MAKE} -C ${PRK_TARGET_PATH} -f Makefile.legacy coarray
             export PRK_MPI_PROCS=4
             if [ "${CC}" = "gcc" ] ; then
                 if [ "$os" = "Darwin" ] ; then

@@ -1,10 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
-if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
-  message(FATAL_ERROR
-    "In-source builds are not allowed here. Run cmake from an out-of-source "
-    "build directory instead, e.g.:\n  cmake -S . -B build && cmake --build build")
-endif()
+# In-source builds (`cmake .`) are allowed: the legacy hand-written Makefile
+# this would otherwise collide with has been moved to Makefile.legacy.
 
 # Thin convenience wrapper only: every language under here is its own
 # independent CMake project (own cmake_minimum_required()/project()/

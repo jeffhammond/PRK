@@ -1,27 +1,17 @@
 #
-# CMake port of FORTRAN/Makefile. Target groups and their compiler/toolchain
-# gating mirror the Makefile's EXTRA=... conditionals (see FORTRAN/Makefile
-# and the per-target pattern rules) as closely as CMake's find_package()/
-# compiler-ID/try_compile() facilities allow.
+# CMake port of FORTRAN/Makefile.legacy. Target groups and their
+# compiler/toolchain gating mirror the Makefile's EXTRA=... conditionals
+# (see FORTRAN/Makefile.legacy and its per-target pattern rules) as closely
+# as CMake's find_package()/compiler-ID/try_compile() facilities allow.
 #
-# Standalone project: `cd FORTRAN && cmake -S . -B build` works on its own.
-# It's also add_subdirectory()'d from the repo root for a combined build;
-# CMake fully supports a nested project() in that case.
+# Standalone project: `cd FORTRAN && cmake -S . -B build` works on its own
+# (in-source `cmake .` works too -- the legacy hand-written Makefile this
+# would otherwise collide with has been moved to Makefile.legacy). It's also
+# add_subdirectory()'d from the repo root for a combined build; CMake fully
+# supports a nested project() in that case.
 #
 
 cmake_minimum_required(VERSION 3.16)
-
-# In-source `cmake .` writes CMakeCache.txt/CMakeFiles/ and a generated
-# Makefile straight into this directory, clobbering the tracked
-# FORTRAN/Makefile. Require an out-of-source build directory instead, e.g.
-# `cmake -S . -B build`.
-if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
-  message(FATAL_ERROR
-    "In-source builds are not allowed here (they overwrite FORTRAN/Makefile). "
-    "Run cmake from an out-of-source build directory instead, e.g.:\n"
-    "  cmake -S . -B build && cmake --build build")
-endif()
-
 project(PRK_Fortran LANGUAGES Fortran)
 enable_testing()
 
