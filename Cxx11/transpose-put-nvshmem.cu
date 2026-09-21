@@ -241,10 +241,10 @@ int main(int argc, char * argv[])
                 prk::CUDA::sync();
                 
                 // PUT the transposed block to remote PE
-                prk::NVSHMEM::put(B + roffset, T, block_order * block_order, recv_from);
+                prk::NVSHMEM::put_signal_increment(B + roffset, T, block_order * block_order, S + send_to, send_to);
 
                 // Synchronize between phases
-                prk::NVSHMEM::barrier(false);
+                prk::NVSHMEM::signal_fetch(S + recv_from);
             }
         }
         prk::check( cudaEventRecord(transpose_stop) );

@@ -84,6 +84,14 @@ namespace prk {
             nvshmemx_putmem_signal_on_stream(dest, source, count * sizeof(T), sig_addr, 1, NVSHMEM_SIGNAL_ADD, pe, stream);
         }
 
+        inline uint64_t signal_fetch(uint64_t * sig_addr) {
+            return nvshmem_signal_fetch(sig_addr);
+        }
+
+        inline void signal_wait_until_equal(uint64_t * sig_addr, uint64_t cmp_value, cudaStream_t stream = 0) {
+            nvshmemx_signal_wait_until_on_stream(sig_addr, NVSHMEM_CMP_EQ, cmp_value, stream);
+        }
+
         template <typename T>
         void get(T * dest, const T * source, size_t count, int pe, cudaStream_t stream = 0) {
             nvshmemx_getmem_on_stream(dest, source, count * sizeof(T), pe, stream);
