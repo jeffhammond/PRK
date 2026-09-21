@@ -4,6 +4,31 @@
 # and the per-target pattern rules) as closely as CMake's find_package()/
 # compiler-ID/try_compile() facilities allow.
 #
+# Standalone project: `cd FORTRAN && cmake -S . -B build` works on its own.
+# It's also add_subdirectory()'d from the repo root for a combined build;
+# CMake fully supports a nested project() in that case.
+#
+
+cmake_minimum_required(VERSION 3.16)
+
+# In-source `cmake .` writes CMakeCache.txt/CMakeFiles/ and a generated
+# Makefile straight into this directory, clobbering the tracked
+# FORTRAN/Makefile. Require an out-of-source build directory instead, e.g.
+# `cmake -S . -B build`.
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
+  message(FATAL_ERROR
+    "In-source builds are not allowed here (they overwrite FORTRAN/Makefile). "
+    "Run cmake from an out-of-source build directory instead, e.g.:\n"
+    "  cmake -S . -B build && cmake --build build")
+endif()
+
+project(PRK_Fortran LANGUAGES Fortran)
+enable_testing()
+
+# Shared find modules / helper scripts live in ../cmake, one level up from
+# this file, regardless of whether this is the top-level project or was
+# add_subdirectory()'d from the repo root.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake/modules")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -24,11 +49,11 @@ find_package(OpenACC COMPONENTS Fortran)
 find_package(OpenCoarrays)
 find_package(GlobalArrays)
 
-include("${CMAKE_SOURCE_DIR}/cmake/AutobuildDeps.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/AutobuildDeps.cmake")
 prk_autobuild_opencoarrays()
 prk_autobuild_global_arrays()
 
-include("${CMAKE_SOURCE_DIR}/cmake/PRKFortranFeatures.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKFortranFeatures.cmake")
 prk_check_coarray_single()
 prk_check_coarray_lib()
 prk_check_openmp_offload()

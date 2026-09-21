@@ -1,25 +1,32 @@
 cmake_minimum_required(VERSION 3.16)
 
-# No default languages: each PRK_ENABLE_<LANG> subdirectory enables only the
-# language(s) it needs, so e.g. building just Fortran never requires a C++
-# compiler to be available.
-project(PRK NONE)
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
+  message(FATAL_ERROR
+    "In-source builds are not allowed here. Run cmake from an out-of-source "
+    "build directory instead, e.g.:\n  cmake -S . -B build && cmake --build build")
+endif()
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
+# Thin convenience wrapper only: every language under here is its own
+# independent CMake project (own cmake_minimum_required()/project()/
+# enable_testing(), own dependency detection) and can be configured and
+# built standalone, e.g. `cd FORTRAN && cmake -S . -B build`. This root
+# project just add_subdirectory()s the enabled ones so `cmake -S . -B build`
+# from the repo root builds/tests everything in one combined build tree.
+# CMake fully supports a nested project() under add_subdirectory().
+project(PRK NONE)
 
 enable_testing()
 
 option(PRK_ENABLE_FORTRAN "Build FORTRAN/ kernels" ON)
 
 if(PRK_ENABLE_FORTRAN)
-  enable_language(Fortran)
   add_subdirectory(FORTRAN)
 endif()
 
 # Future languages follow the same pattern: add an option
-# PRK_ENABLE_<LANG> (default ON), enable_language(...) if the subdirectory
-# needs a language CMake doesn't already know about, then
-# add_subdirectory(<DIR>), with a <DIR>/CMakeLists.txt structured like
-# FORTRAN/CMakeLists.txt (dependency detection via find_package()/compiler
-# ID checks, one target group per Makefile target group, CTest entries
-# reproducing ci/build-run-prk.sh's run commands).
+# PRK_ENABLE_<LANG> (default ON) and add_subdirectory(<DIR>), with a
+# <DIR>/CMakeLists.txt structured like FORTRAN/CMakeLists.txt -- its own
+# cmake_minimum_required()/project()/enable_testing(), CMAKE_MODULE_PATH
+# pointed at ../cmake/modules via CMAKE_CURRENT_LIST_DIR (not
+# CMAKE_SOURCE_DIR, which only means "repo root" when standalone), and the
+# same dependency-detection / target-group / CTest pattern.
