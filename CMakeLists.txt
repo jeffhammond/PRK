@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 
 # In-source builds (`cmake .`) are allowed: the legacy hand-written Makefile
 # this would otherwise collide with has been moved to Makefile.legacy.

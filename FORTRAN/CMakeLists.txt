@@ -11,7 +11,7 @@
 # supports a nested project() in that case.
 #
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 project(PRK_Fortran LANGUAGES Fortran)
 enable_testing()
 
@@ -35,6 +35,7 @@ set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod")
 find_package(OpenMP COMPONENTS Fortran)
 find_package(MPI COMPONENTS Fortran)
 find_package(BLAS)
+find_package(LAPACK)
 find_package(OpenACC COMPONENTS Fortran)
 find_package(OpenCoarrays)
 find_package(GlobalArrays)
@@ -235,7 +236,7 @@ endif()
 
 # --- Global Arrays ------------------------------------------------------
 
-if(GlobalArrays_FOUND AND MPI_Fortran_FOUND)
+if(GlobalArrays_FOUND AND MPI_Fortran_FOUND AND BLAS_FOUND AND LAPACK_FOUND)
   if(NOT TARGET GlobalArrays::GlobalArrays)
     add_library(GlobalArrays::GlobalArrays UNKNOWN IMPORTED)
     set_target_properties(GlobalArrays::GlobalArrays PROPERTIES
@@ -246,33 +247,28 @@ if(GlobalArrays_FOUND AND MPI_Fortran_FOUND)
         INTERFACE_LINK_LIBRARIES "${GlobalArrays_ARMCI_LIBRARY};MPI::MPI_Fortran")
     endif()
   endif()
-  # GA is built with 64-bit default integers (GAFLAG += -fdefault-integer-8 for gfortran).
-  if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-    set(_prk_ga_flag "-fdefault-integer-8")
-  else()
-    set(_prk_ga_flag "-i8")
-  endif()
+  # GA is built with 64-bit integers, but -fdefault-integer-8 (a blanket
+  # per-compilation-unit flag) is NOT used to match it: it does not reliably
+  # widen every declaration GA's Fortran interface depends on, and separately
+  # changes unrelated compiler-generated code. Instead every GA-facing
+  # variable/argument in nstream-ga.F90/transpose-ga.F90/dgemm-ga.F90 is
+  # explicitly kind=INT64 (or logical(kind=8) for GA's LOGICAL functions),
+  # exactly matching GA's Integer=8-byte ABI with no compiler flag needed.
+  # libga.a is static, so its own transitive BLAS/LAPACK symbol needs
+  # (sgemm_/dgemm_/... from matmul.o, dsygv_/dsyev_/dgetrf_/dgetrs_ from
+  # ga_diag_seq.o/ga_solve_seq.o) become our link requirements too.
+  set(_prk_ga_libs prk_fortran_mpi_mod GlobalArrays::GlobalArrays LAPACK::LAPACK BLAS::BLAS)
 
-  prk_fortran_executable(nstream-ga   SOURCES nstream-ga.F90   LIBS prk_fortran_mpi_mod GlobalArrays::GlobalArrays FLAGS ${_prk_ga_flag})
-  prk_fortran_executable(transpose-ga SOURCES transpose-ga.F90 LIBS prk_fortran_mpi_mod GlobalArrays::GlobalArrays FLAGS ${_prk_ga_flag})
-  prk_fortran_executable(dgemm-ga     SOURCES dgemm-ga.F90     LIBS prk_fortran_mpi_mod GlobalArrays::GlobalArrays FLAGS ${_prk_ga_flag})
+  prk_fortran_executable(nstream-ga   SOURCES nstream-ga.F90   LIBS ${_prk_ga_libs})
+  prk_fortran_executable(transpose-ga SOURCES transpose-ga.F90 LIBS ${_prk_ga_libs})
+  prk_fortran_executable(dgemm-ga     SOURCES dgemm-ga.F90     LIBS ${_prk_ga_libs})
   add_custom_target(fortran_ga DEPENDS nstream-ga transpose-ga dgemm-ga)
 
   foreach(_t nstream-ga transpose-ga dgemm-ga)
     if(GlobalArrays_AUTOBUILT)
       add_dependencies(${_t} ${GlobalArrays_EXTERNAL_TARGET})
     endif()
-    # *-ga.F90 combine -fdefault-integer-8 (required to match how GA itself
-    # is built) with iso_fortran_env/mpi_f08, which assume default (4-byte)
-    # INTEGER -- a genuine incompatibility in these three kernels' sources
-    # against modern gfortran + Open MPI's mpi_f08, not something this CMake
-    # port can paper over. Keep them out of the default `all`/`fortran_ga`
-    # build so a working GA install doesn't break the rest of the build;
-    # still buildable explicitly via `cmake --build build --target nstream-ga`
-    # for anyone on a toolchain where it does work.
-    set_target_properties(${_t} PROPERTIES EXCLUDE_FROM_ALL TRUE)
   endforeach()
-  set_target_properties(fortran_ga PROPERTIES EXCLUDE_FROM_ALL TRUE)
 else()
   message(STATUS "FORTRAN ga: skipped, Global Arrays and/or MPI Fortran not available")
 endif()
@@ -314,6 +310,9 @@ function(prk_fortran_test test_name)
   set(multiValueArgs COMMAND)
   cmake_parse_arguments(PFT "" "" "${multiValueArgs}" ${ARGN})
   add_test(NAME ${test_name} COMMAND ${PFT_COMMAND})
+  # A hung/looping kernel (e.g. a coarray/MPI deadlock) must not be able to
+  # block the whole suite indefinitely.
+  set_tests_properties(${test_name} PROPERTIES TIMEOUT 30)
 endfunction()
 
 # serial
@@ -374,4 +373,10 @@ endif()
 
 if(BLAS_FOUND)
   prk_fortran_test(fortran_blas_dgemm COMMAND dgemm-blas 10 400)
+endif()
+
+if(GlobalArrays_FOUND AND MPI_Fortran_FOUND AND BLAS_FOUND AND LAPACK_FOUND)
+  prk_fortran_test(fortran_ga_nstream   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:nstream-ga> 10 16777216)
+  prk_fortran_test(fortran_ga_transpose COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:transpose-ga> 10 1024)
+  prk_fortran_test(fortran_ga_dgemm     COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:dgemm-ga> 10 400)
 endif()

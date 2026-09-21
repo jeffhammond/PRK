@@ -74,6 +74,11 @@ function(prk_autobuild_global_arrays)
     message(STATUS "Global Arrays: not found, and cannot autobuild without mpicc/mpif90 on PATH")
     return()
   endif()
+  find_program(_prk_autoreconf autoreconf)
+  if(NOT _prk_autoreconf)
+    message(STATUS "Global Arrays: not found, and cannot autobuild without autoreconf on PATH")
+    return()
+  endif()
 
   message(STATUS "Global Arrays: not found on system, fetching and building ARMCI-MPI + GA from source (GitHub: jeffhammond/armci-mpi, GlobalArrays/ga)")
 
@@ -96,7 +101,13 @@ function(prk_autobuild_global_arrays)
   set(_armci_install_dir "${INSTALL_DIR}")
 
   # GA itself, linked against the ARMCI-MPI we just built. Mirrors
-  # ci/install-ga.sh: autogen.sh && configure --with-armci=... && make install.
+  # ci/install-ga.sh's configure --with-armci=... && make install, but NOT
+  # its autogen.sh: GA's own autogen.sh runs travis/install-autotools.sh,
+  # which builds a private m4/autoconf/automake/libtool from source and
+  # downloads config.guess/config.sub from git.savannah.gnu.org -- slow and
+  # a hard failure with no network access. autoreconf -vif with the system's
+  # already-installed autotools does the same job (it recurses into GA's
+  # armci/ and comex/ AC_CONFIG_SUBDIRS automatically) without any of that.
   set(_ga_prefix "${CMAKE_BINARY_DIR}/_deps/ga")
   ExternalProject_Add(global_arrays_external
     DEPENDS           armci_mpi_external
@@ -104,7 +115,7 @@ function(prk_autobuild_global_arrays)
     GIT_TAG           develop
     PREFIX            "${_ga_prefix}"
     BUILD_IN_SOURCE   TRUE
-    CONFIGURE_COMMAND <SOURCE_DIR>/autogen.sh
+    CONFIGURE_COMMAND ${_prk_autoreconf} -vif
               COMMAND <SOURCE_DIR>/configure --with-armci=${_armci_install_dir}
                         MPICC=${_prk_mpicc} MPIFC=${_prk_mpif90} MPIF77=${_prk_mpif90}
                         --prefix=<INSTALL_DIR>
