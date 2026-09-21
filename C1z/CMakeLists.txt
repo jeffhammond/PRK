@@ -54,6 +54,9 @@ if(PRK_PETSC_INCLUDE_DIR AND PRK_PETSC_LIBRARY AND MPI_C_FOUND)
   set(PRK_PETSC_FOUND TRUE)
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/AutobuildDeps.cmake")
+prk_autobuild_petsc()
+
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKCFeatures.cmake")
 prk_check_openmp_offload_c()
 prk_check_openacc_links_c()
@@ -191,6 +194,17 @@ if(MPI_C_FOUND)
     target_include_directories(transpose-petsc PRIVATE ${PRK_PETSC_INCLUDE_DIR})
     target_link_libraries(nstream-petsc   PRIVATE ${PRK_PETSC_LIBRARY})
     target_link_libraries(transpose-petsc PRIVATE ${PRK_PETSC_LIBRARY})
+    if(PRK_PETSC_AUTOBUILT)
+      add_dependencies(nstream-petsc   ${PRK_PETSC_EXTERNAL_TARGET})
+      add_dependencies(transpose-petsc ${PRK_PETSC_EXTERNAL_TARGET})
+      # libpetsc.so lives outside any system loader path when autobuilt;
+      # rpath it so the binaries run standalone, not just under CTest with
+      # LD_LIBRARY_PATH set.
+      get_filename_component(_prk_petsc_libdir "${PRK_PETSC_LIBRARY}" DIRECTORY)
+      set_target_properties(nstream-petsc transpose-petsc PROPERTIES
+        BUILD_RPATH "${_prk_petsc_libdir}"
+        INSTALL_RPATH "${_prk_petsc_libdir}")
+    endif()
     add_custom_target(c1z_petsc DEPENDS nstream-petsc transpose-petsc)
   else()
     message(STATUS "C1z petsc: skipped, PETSc not found")
@@ -346,4 +360,12 @@ endif()
 
 if(PRK_MEMKIND_FOUND)
   prk_c_test(c1z_memkind_nstream COMMAND nstream-memkind 10 16777216 32)
+endif()
+
+if(PRK_PETSC_FOUND)
+  # PETSc kernels parse PETSc-style -i/-n options, not positional argv like
+  # every other C1z kernel (see PetscOptionsGetInt() in nstream-petsc.c/
+  # transpose-petsc.c).
+  prk_c_test(c1z_petsc_nstream   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:nstream-petsc> -i 10 -n 16777216)
+  prk_c_test(c1z_petsc_transpose COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:transpose-petsc> -i 10 -n 1024)
 endif()

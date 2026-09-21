@@ -2,13 +2,14 @@
 AutobuildDeps
 -------------
 
-Optional dependencies that PRK's own CI builds from source when the system
-doesn't have them (see ci/install-opencoarrays.sh, ci/install-armci-mpi.sh,
-ci/install-ga.sh) get the same treatment here via ExternalProject_Add,
-instead of just being silently skipped. Controlled by
-PRK_FORTRAN_AUTOBUILD_DEPS (default ON); each prk_autobuild_*() function is a
-no-op if the dependency was already found on the system, or if this option
-is off.
+Optional dependencies get built from source via ExternalProject_Add instead
+of just being silently skipped when the system doesn't have them.
+OpenCoarrays/ARMCI-MPI/Global Arrays mirror what PRK's own CI already does
+by hand (see ci/install-opencoarrays.sh, ci/install-armci-mpi.sh,
+ci/install-ga.sh); PETSc has no such CI precedent but gets the same
+treatment for consistency. Controlled by PRK_AUTOBUILD_DEPS (default ON);
+each prk_autobuild_*() function is a no-op if the dependency was already
+found on the system, or if this option is off.
 
 This same ExternalProject_Add pattern (ci/install-*.sh script -> CMake
 external project, with BUILD_BYPRODUCTS pointing at the not-yet-built
@@ -19,14 +20,14 @@ like prk_autobuild_opencoarrays() below, rather than the autotools
 CONFIGURE_COMMAND dance prk_autobuild_global_arrays() needs.
 #]=======================================================================]
 
-option(PRK_FORTRAN_AUTOBUILD_DEPS
-  "Fetch and build missing optional Fortran dependencies (OpenCoarrays, Global Arrays) from source"
+option(PRK_AUTOBUILD_DEPS
+  "Fetch and build missing optional dependencies (OpenCoarrays, Global Arrays, PETSc, ...) from source"
   ON)
 
 include(ExternalProject)
 
 function(prk_autobuild_opencoarrays)
-  if(OpenCoarrays_FOUND OR NOT PRK_FORTRAN_AUTOBUILD_DEPS)
+  if(OpenCoarrays_FOUND OR NOT PRK_AUTOBUILD_DEPS)
     return()
   endif()
   if(NOT (MPI_C_FOUND AND MPI_Fortran_FOUND))
@@ -61,7 +62,7 @@ function(prk_autobuild_opencoarrays)
 endfunction()
 
 function(prk_autobuild_global_arrays)
-  if(GlobalArrays_FOUND OR NOT PRK_FORTRAN_AUTOBUILD_DEPS)
+  if(GlobalArrays_FOUND OR NOT PRK_AUTOBUILD_DEPS)
     return()
   endif()
   if(NOT MPI_Fortran_FOUND)
@@ -136,4 +137,62 @@ function(prk_autobuild_global_arrays)
   set(GlobalArrays_FOUND TRUE PARENT_SCOPE)
   set(GlobalArrays_AUTOBUILT TRUE PARENT_SCOPE)
   set(GlobalArrays_EXTERNAL_TARGET global_arrays_external PARENT_SCOPE)
+endfunction()
+
+function(prk_autobuild_petsc)
+  if(PRK_PETSC_FOUND OR NOT PRK_AUTOBUILD_DEPS)
+    return()
+  endif()
+  if(NOT MPI_C_FOUND)
+    message(STATUS "PETSc: not found, and cannot autobuild without MPI C")
+    return()
+  endif()
+  find_program(_prk_mpicc mpicc)
+  if(NOT _prk_mpicc)
+    message(STATUS "PETSc: not found, and cannot autobuild without mpicc on PATH")
+    return()
+  endif()
+  find_program(_prk_python3 python3)
+  if(NOT _prk_python3)
+    message(STATUS "PETSc: not found, and cannot autobuild without python3 on PATH (needed by PETSc's configure)")
+    return()
+  endif()
+
+  message(STATUS "PETSc: not found on system, fetching and building from source (GitHub: petsc/petsc) -- this is a large build and can take a while")
+
+  # PETSc's own configure (a Python script, not autotools) only generates
+  # build files; it does not build or install by itself, so those are
+  # separate ExternalProject steps. --with-debugging=0 and skipping the
+  # Fortran/C++ bindings and external packages keeps this to a plain C
+  # library build, which is all PRK's *-petsc.c kernels need.
+  set(_petsc_prefix "${CMAKE_BINARY_DIR}/_deps/petsc")
+  ExternalProject_Add(petsc_external
+    GIT_REPOSITORY    https://github.com/petsc/petsc.git
+    GIT_TAG           release
+    GIT_SHALLOW       TRUE
+    PREFIX            "${_petsc_prefix}"
+    BUILD_IN_SOURCE   TRUE
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure
+                        --with-cc=${_prk_mpicc}
+                        --with-cxx=0
+                        --with-fc=0
+                        --with-debugging=0
+                        --download-fblaslapack=0
+                        --prefix=<INSTALL_DIR>
+    BUILD_COMMAND     make
+    INSTALL_COMMAND   make install
+    BUILD_BYPRODUCTS  <INSTALL_DIR>/lib/libpetsc.so
+  )
+  ExternalProject_Get_property(petsc_external INSTALL_DIR)
+
+  # CMake validates IMPORTED target INTERFACE_INCLUDE_DIRECTORIES exist at
+  # generate time, even though this directory is only populated once
+  # petsc_external actually builds.
+  file(MAKE_DIRECTORY "${INSTALL_DIR}/include")
+
+  set(PRK_PETSC_INCLUDE_DIR "${INSTALL_DIR}/include" CACHE PATH "" FORCE)
+  set(PRK_PETSC_LIBRARY "${INSTALL_DIR}/lib/libpetsc.so" CACHE FILEPATH "" FORCE)
+  set(PRK_PETSC_FOUND TRUE PARENT_SCOPE)
+  set(PRK_PETSC_AUTOBUILT TRUE PARENT_SCOPE)
+  set(PRK_PETSC_EXTERNAL_TARGET petsc_external PARENT_SCOPE)
 endfunction()
