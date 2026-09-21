@@ -241,7 +241,7 @@ allcxx:
 	$(MAKE) -C Cxx11
 
 allc1z:
-	$(MAKE) -C C1z
+	$(MAKE) -C C1z -f Makefile.legacy
 
 allrust:
 	$(MAKE) -C RUST
@@ -336,7 +336,7 @@ clean:
 	cd SERIAL/AMR;              $(MAKE) clean
 	make -C FORTRAN -f Makefile.legacy clean
 	make -C Cxx11 clean
-	make -C C1z clean
+	make -C C1z -f Makefile.legacy clean
 	rm -f stats.json
 
 veryclean: clean

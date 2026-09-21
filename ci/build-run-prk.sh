@@ -142,7 +142,7 @@ case "$PRK_TARGET" in
         echo "EXTRA_CLIBS=-lm -lpthread" >> common/make.defs
 
         # C11 without external parallelism
-        ${MAKE} -C $PRK_TARGET_PATH nstream p2p stencil transpose p2p-hyperplane
+        ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy nstream p2p stencil transpose p2p-hyperplane
         $PRK_TARGET_PATH/nstream         10 16777216 32
         $PRK_TARGET_PATH/p2p             10 1024 1024
         $PRK_TARGET_PATH/p2p             10 1024 1024 100 100
@@ -158,7 +158,7 @@ case "$PRK_TARGET" in
         done
 
         # C11 2D VLA
-        ${MAKE} -C $PRK_TARGET_PATH p2p-2d stencil-2d transpose-2d p2p-tasks-2d p2p-hyperplane-2d
+        ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy p2p-2d stencil-2d transpose-2d p2p-tasks-2d p2p-hyperplane-2d
         $PRK_TARGET_PATH/p2p-2d             10 1024 1024
         $PRK_TARGET_PATH/p2p-2d             10 1024 1024 100 100
         $PRK_TARGET_PATH/p2p-tasks-2d       10 1024 1024
@@ -175,7 +175,7 @@ case "$PRK_TARGET" in
         done
 
         # C11 with POSIX or C11 thread parallelism - test POSIX here, C11 at the end.
-        ${MAKE} -C $PRK_TARGET_PATH transpose-thread
+        ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy transpose-thread
         $PRK_TARGET_PATH/transpose-thread   10 1024 512
 
         # C11 with OpenMP
@@ -206,7 +206,7 @@ case "$PRK_TARGET" in
             echo "OPENMPFLAG=-fopenmp" >> common/make.defs
         fi
         export OMP_NUM_THREADS=2
-        ${MAKE} -C $PRK_TARGET_PATH nstream-openmp p2p-tasks-openmp p2p-hyperplane-openmp stencil-openmp transpose-openmp
+        ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy nstream-openmp p2p-tasks-openmp p2p-hyperplane-openmp stencil-openmp transpose-openmp
         $PRK_TARGET_PATH/nstream-openmp           10 16777216 32
         $PRK_TARGET_PATH/p2p-tasks-openmp         10 1024 1024 100 100
         $PRK_TARGET_PATH/p2p-hyperplane-openmp    10 1024
@@ -220,7 +220,7 @@ case "$PRK_TARGET" in
             done
         done
         # OpenMP C11 2D VLA
-        ${MAKE} -C $PRK_TARGET_PATH p2p-tasks-2d-openmp p2p-hyperplane-2d-openmp stencil-2d-openmp transpose-2d-openmp
+        ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy p2p-tasks-2d-openmp p2p-hyperplane-2d-openmp stencil-2d-openmp transpose-2d-openmp
         $PRK_TARGET_PATH/p2p-tasks-2d-openmp       10 1024 1024
         $PRK_TARGET_PATH/p2p-tasks-2d-openmp       10 1024 1024 100 100
         $PRK_TARGET_PATH/p2p-hyperplane-2d-openmp  10 1024
@@ -236,7 +236,7 @@ case "$PRK_TARGET" in
         # Target Offload
         if [ "${CC}" = "gcc" ] && [ ! true ] ; then
             echo "OFFLOADFLAG=-foffload=\"-O3 -v\"" >> common/make.defs
-            ${MAKE} -C $PRK_TARGET_PATH target
+            ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy target
             $PRK_TARGET_PATH/nstream-target     10 16777216
             $PRK_TARGET_PATH/stencil-target     10 1000
             $PRK_TARGET_PATH/transpose-target   10 1024 32
@@ -250,12 +250,12 @@ case "$PRK_TARGET" in
 
         # Use MUSL for GCC+Linux only
         if [ "$os" = "Linux" ] && [ "$CC" = "gcc" ] ; then
-            ${MAKE} -C $PRK_TARGET_PATH clean
+            ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy clean
             sh ./ci/install-musl.sh ${CI_ROOT} ${PRK_CC}
             echo "PRKVERSION=\"'2.16'\"" > common/make.defs
             echo "CC=${CI_ROOT}/musl/bin/musl-gcc -static -std=c11 -DUSE_C11_THREADS" >> common/make.defs
             echo "EXTRA_CLIBS=-lm -lpthread" >> common/make.defs
-            ${MAKE} -C $PRK_TARGET_PATH transpose-thread
+            ${MAKE} -C $PRK_TARGET_PATH -f Makefile.legacy transpose-thread
             $PRK_TARGET_PATH/transpose-thread   10 1024 512
         fi
 
