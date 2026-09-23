@@ -291,14 +291,24 @@ else()
 endif()
 
 if(BLAS_FOUND)
-  prk_cxx_executable(transpose-cblas SOURCES transpose-cblas.cc LIBS BLAS::BLAS)
-  prk_cxx_executable(dgemm-cblas     SOURCES dgemm-cblas.cc     LIBS BLAS::BLAS)
-  prk_cxx_executable(sgemm-cblas     SOURCES sgemm-cblas.cc     LIBS BLAS::BLAS)
-  prk_cxx_executable(xgemm-cblas     SOURCES xgemm-cblas.cc     LIBS BLAS::BLAS)
+  # These sources already have an `#ifdef MKL` path using MKL's own
+  # mkl_dgemm/mkl_domatcopy-style API instead of the CBLAS extensions
+  # (cblas_dgemm_batch, cblas_domatcopy) that only OpenBLAS provides --
+  # linking those extensions against MKL fails at link time (MKL exports
+  # mkl_domatcopy, not cblas_domatcopy). Detect MKL from the resolved BLAS
+  # library path and opt into that source path instead of assuming OpenBLAS.
+  set(_cblas_defs "")
+  if(BLAS_LIBRARIES MATCHES "mkl")
+    list(APPEND _cblas_defs MKL)
+  endif()
+  prk_cxx_executable(transpose-cblas SOURCES transpose-cblas.cc LIBS BLAS::BLAS DEFS ${_cblas_defs})
+  prk_cxx_executable(dgemm-cblas     SOURCES dgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
+  prk_cxx_executable(sgemm-cblas     SOURCES sgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
+  prk_cxx_executable(xgemm-cblas     SOURCES xgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
   add_custom_target(cxx11_cblas DEPENDS transpose-cblas dgemm-cblas sgemm-cblas xgemm-cblas)
 
   if(MPI_CXX_FOUND)
-    prk_cxx_executable(dgemm-mpi-cblas SOURCES dgemm-mpi-cblas.cc LIBS MPI::MPI_CXX BLAS::BLAS)
+    prk_cxx_executable(dgemm-mpi-cblas SOURCES dgemm-mpi-cblas.cc LIBS MPI::MPI_CXX BLAS::BLAS DEFS ${_cblas_defs})
     if(TARGET cxx11_mpi)
       add_dependencies(cxx11_mpi dgemm-mpi-cblas)
     endif()
@@ -452,10 +462,28 @@ if(TBB_FOUND)
     p2p-innerloop-tbb p2p-tbb stencil-tbb transpose-tbb nstream-tbb p2p-hyperplane-tbb p2p-tasks-tbb)
 
   if(PRK_PSTL_WORKS)
-    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb)
-    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb)
-    prk_cxx_executable(nstream-pstl   SOURCES nstream-pstl.cc   LIBS TBB::tbb)
-    add_custom_target(cxx11_pstl DEPENDS stencil-pstl transpose-pstl nstream-pstl)
+    # prk_ranges.h needs exactly one of USE_GCC_RANGES/USE_BOOST_IRANGE/
+    # USE_RANGES_TS defined; range-v3 is what's available here.
+    set(_pstl_defs USE_RANGES_TS)
+    # prk_pstl.h's `namespace exec = ...` only auto-defines for GCC
+    # (__GNUC__ >= 9); Clang-family compilers like icpx (__GNUC__ 4, for
+    # compatibility) need to be told explicitly which PSTL backend to use.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+      list(APPEND _pstl_defs USE_ONEAPI_DPL)
+    endif()
+    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS ${_pstl_defs})
+    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS ${_pstl_defs})
+    add_custom_target(cxx11_pstl DEPENDS stencil-pstl transpose-pstl)
+    # nstream-pstl.cc unconditionally `#include <ranges>` and uses
+    # std::ranges directly (nothing to do with prk_ranges.h/range-v3),
+    # same as nstream-stl.cc/nstream-ranges.cc -- needs C++20.
+    if(PRK_CXX20_SUPPORTED)
+      prk_cxx_executable(nstream-pstl SOURCES nstream-pstl.cc LIBS TBB::tbb DEFS ${_pstl_defs})
+      set_target_properties(nstream-pstl PROPERTIES CXX_STANDARD 20)
+      add_dependencies(cxx11_pstl nstream-pstl)
+    else()
+      message(STATUS "Cxx11 nstream-pstl: skipped, compiler has no C++20 <ranges> support")
+    endif()
   else()
     message(STATUS "Cxx11 pstl: skipped, parallel <execution> algorithms don't link with TBB here")
   endif()
