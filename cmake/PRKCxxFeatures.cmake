@@ -1,0 +1,149 @@
+#[=======================================================================[.rst:
+PRKCxxFeatures
+--------------
+
+try_compile()/FetchContent-based probes for C++ compiler capabilities and
+header-only dependencies used by Cxx11, mirroring PRKFortranFeatures.cmake/
+PRKCFeatures.cmake's approach for the other languages.
+#]=======================================================================]
+
+include(CheckCXXSourceCompiles)
+include(FetchContent)
+
+function(prk_check_openmp_offload_cxx)
+  if(DEFINED PRK_CXX_OPENMP_OFFLOAD_FLAG)
+    return()
+  endif()
+  if(NOT OpenMP_CXX_FOUND)
+    set(PRK_CXX_OPENMP_OFFLOAD_FLAG "" CACHE STRING "Compiler flags enabling C++ OpenMP target offload")
+    message(STATUS "C++ OpenMP target offload: not probed, no OpenMP found")
+    return()
+  endif()
+  set(_src "int main() { int s = 0;\n#pragma omp target map(tofrom: s)\n  { s = 1; }\n  return s; }\n")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    set(_candidate "-fopenmp;-foffload=-O3")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(_candidate "-fopenmp;-fopenmp-targets=x86_64-pc-linux-gnu")
+  else()
+    set(_candidate "")
+  endif()
+  if(_candidate STREQUAL "")
+    set(PRK_CXX_OPENMP_OFFLOAD_FLAG "" CACHE STRING "Compiler flags enabling C++ OpenMP target offload")
+    message(STATUS "C++ OpenMP target offload: not probed, no known flag for ${CMAKE_CXX_COMPILER_ID}")
+    return()
+  endif()
+  set(CMAKE_REQUIRED_FLAGS "${_candidate}")
+  check_cxx_source_compiles("${_src}" PRK_CXX_OPENMP_OFFLOAD_COMPILES)
+  unset(CMAKE_REQUIRED_FLAGS)
+  if(PRK_CXX_OPENMP_OFFLOAD_COMPILES)
+    set(PRK_CXX_OPENMP_OFFLOAD_FLAG "${_candidate}" CACHE STRING "Compiler flags enabling C++ OpenMP target offload")
+    message(STATUS "C++ OpenMP target offload (${_candidate}): compiles and links")
+  else()
+    set(PRK_CXX_OPENMP_OFFLOAD_FLAG "" CACHE STRING "Compiler flags enabling C++ OpenMP target offload")
+    message(STATUS "C++ OpenMP target offload: compiler rejected ${_candidate}")
+  endif()
+endfunction()
+
+function(prk_check_range_v3_cxx)
+  if(DEFINED PRK_RANGE_V3_FOUND)
+    return()
+  endif()
+  find_path(PRK_RANGE_V3_INCLUDE_DIR range/v3/all.hpp)
+  if(PRK_RANGE_V3_INCLUDE_DIR)
+    set(PRK_RANGE_V3_FOUND TRUE CACHE BOOL "range-v3 headers available")
+    message(STATUS "range-v3: found at ${PRK_RANGE_V3_INCLUDE_DIR}")
+    return()
+  endif()
+  # Header-only; fetch it rather than skip stl/ranges entirely, unlike the
+  # heavier autobuilt dependencies (GA/PETSc/Kokkos/RAJA) which need an
+  # actual build step.
+  message(STATUS "range-v3: not found on system, fetching headers (GitHub: ericniebler/range-v3)")
+  FetchContent_Declare(range_v3
+    GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+    GIT_TAG        0.12.0
+    GIT_SHALLOW    TRUE)
+  FetchContent_GetProperties(range_v3)
+  if(NOT range_v3_POPULATED)
+    FetchContent_Populate(range_v3)
+  endif()
+  if(EXISTS "${range_v3_SOURCE_DIR}/include/range/v3/all.hpp")
+    set(PRK_RANGE_V3_INCLUDE_DIR "${range_v3_SOURCE_DIR}/include" CACHE PATH "range-v3 include directory" FORCE)
+    set(PRK_RANGE_V3_FOUND TRUE CACHE BOOL "range-v3 headers available")
+    message(STATUS "range-v3: fetched to ${PRK_RANGE_V3_INCLUDE_DIR}")
+  else()
+    set(PRK_RANGE_V3_FOUND FALSE CACHE BOOL "range-v3 headers available")
+    message(STATUS "range-v3: fetch failed")
+  endif()
+endfunction()
+
+function(prk_check_pstl_cxx)
+  if(DEFINED PRK_PSTL_WORKS)
+    return()
+  endif()
+  if(NOT TBB_FOUND)
+    set(PRK_PSTL_WORKS FALSE CACHE BOOL "libstdc++/libc++ parallel <execution> algorithms link with TBB")
+    return()
+  endif()
+  # libstdc++'s <execution> parallel policies dispatch to TBB; this only
+  # actually works if the TBB found is compatible with what the standard
+  # library expects, so probe by linking, not just compiling.
+  set(_src "#include <execution>\n#include <vector>\n#include <algorithm>\nint main() { std::vector<int> v(10,1); std::sort(std::execution::par, v.begin(), v.end()); return v[0]; }\n")
+  set(CMAKE_REQUIRED_LIBRARIES TBB::tbb)
+  check_cxx_source_compiles("${_src}" PRK_PSTL_LINK_COMPILES)
+  unset(CMAKE_REQUIRED_LIBRARIES)
+  if(PRK_PSTL_LINK_COMPILES)
+    set(PRK_PSTL_WORKS TRUE CACHE BOOL "libstdc++/libc++ parallel <execution> algorithms link with TBB")
+    message(STATUS "C++ parallel <execution> + TBB: compiles and links")
+  else()
+    set(PRK_PSTL_WORKS FALSE CACHE BOOL "libstdc++/libc++ parallel <execution> algorithms link with TBB")
+    message(STATUS "C++ parallel <execution> + TBB: link failed")
+  endif()
+endfunction()
+
+function(prk_check_cudastf_cuda cudax_include libcudacxx_include)
+  if(DEFINED PRK_CUDASTF_WORKS)
+    return()
+  endif()
+  # deps/stf/cccl (a local checkout of NVIDIA's CCCL/CUDASTF) predates
+  # CUDA 13's cudaGraphAddDependencies() signature change; compile-check
+  # against the real header rather than trusting "the path exists", the
+  # same principle as the OpenACC/Kokkos-CUDA link probes elsewhere.
+  set(_src "#include <cuda/experimental/stf.cuh>\nusing namespace cuda::experimental::stf;\nint main() { context ctx; ctx.finalize(); return 0; }\n")
+  file(WRITE "${CMAKE_BINARY_DIR}/prk_cudastf_probe.cu" "${_src}")
+  try_compile(PRK_CUDASTF_WORKS
+    "${CMAKE_BINARY_DIR}/prk_cudastf_probe"
+    "${CMAKE_BINARY_DIR}/prk_cudastf_probe.cu"
+    CXX_STANDARD 17
+    COMPILE_DEFINITIONS "--extended-lambda;--expt-relaxed-constexpr"
+    LINK_LIBRARIES CUDA::cuda_driver
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${cudax_include};${libcudacxx_include}")
+  set(PRK_CUDASTF_WORKS ${PRK_CUDASTF_WORKS} CACHE BOOL "CUDASTF (deps/stf/cccl) actually compiles against this CUDA Toolkit")
+  if(PRK_CUDASTF_WORKS)
+    message(STATUS "CUDASTF: compiles against CUDA ${CMAKE_CUDA_COMPILER_VERSION}")
+  else()
+    message(STATUS "CUDASTF: deps/stf/cccl checkout doesn't compile against CUDA ${CMAKE_CUDA_COMPILER_VERSION} (likely too old for this CUDA Toolkit's API)")
+  endif()
+endfunction()
+
+function(prk_check_thrust_host_cxx)
+  if(DEFINED PRK_THRUST_HOST_WORKS)
+    return()
+  endif()
+  # nstream-host-thrust.cc/transpose-host-thrust.cc use nvcc's "extended
+  # lambda" syntax (__host__ __device__ between [] and ()) even though the
+  # Makefile's own %-thrust: %-thrust.cc rule compiles them with the plain
+  # host compiler ($(CXX), not nvcc) -- that syntax is a CUDA-specific
+  # language extension a standard host compiler's parser rejects outright
+  # (this isn't a missing-macro issue __host__/__device__ do get defined as
+  # empty by Thrust's headers for non-nvcc builds; it's the placement
+  # between [] and () itself that's nvcc-only syntax). Probe for it rather
+  # than assume any C++ compiler accepts it.
+  set(_src "int main() { auto f = [=] __host__ __device__ (int x) { return x; }; return f(0); }\n")
+  check_cxx_source_compiles("${_src}" PRK_THRUST_HOST_COMPILES)
+  set(PRK_THRUST_HOST_WORKS ${PRK_THRUST_HOST_COMPILES} CACHE BOOL "Host C++ compiler accepts nvcc's extended-lambda syntax")
+  if(PRK_THRUST_HOST_WORKS)
+    message(STATUS "Host Thrust (nvcc extended-lambda syntax): ${CMAKE_CXX_COMPILER_ID} accepts it")
+  else()
+    message(STATUS "Host Thrust: ${CMAKE_CXX_COMPILER_ID} does not understand nvcc's extended-lambda syntax, skipping nstream/transpose-host-thrust")
+  endif()
+endfunction()

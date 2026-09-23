@@ -11,13 +11,15 @@ treatment for consistency. Controlled by PRK_AUTOBUILD_DEPS (default ON);
 each prk_autobuild_*() function is a no-op if the dependency was already
 found on the system, or if this option is off.
 
-This same ExternalProject_Add pattern (ci/install-*.sh script -> CMake
-external project, with BUILD_BYPRODUCTS pointing at the not-yet-built
-library/executable paths so the dependency graph is still correct) is the
-one to reuse for Kokkos and RAJA once Cxx11 gets CMake support -- both are
-CMake-native projects, so they can use a plain CMAKE_ARGS configure step
-like prk_autobuild_opencoarrays() below, rather than the autotools
-CONFIGURE_COMMAND dance prk_autobuild_global_arrays() needs.
+OpenCoarrays/Global Arrays/PETSc use ExternalProject_Add (separate
+configure+build+install steps, with BUILD_BYPRODUCTS pointing at the
+not-yet-built library paths so the dependency graph is still correct).
+Kokkos and RAJA are both CMake-native projects that build cleanly via
+add_subdirectory(), so prk_autobuild_kokkos()/prk_autobuild_raja() use
+FetchContent_MakeAvailable() instead -- simpler than ExternalProject for
+a dependency that's already a well-behaved CMake project: no separate
+install step, and the real CMake targets (Kokkos::kokkos, RAJA) are
+available directly, no imported-target reconstruction needed.
 #]=======================================================================]
 
 option(PRK_AUTOBUILD_DEPS
@@ -195,4 +197,63 @@ function(prk_autobuild_petsc)
   set(PRK_PETSC_FOUND TRUE PARENT_SCOPE)
   set(PRK_PETSC_AUTOBUILT TRUE PARENT_SCOPE)
   set(PRK_PETSC_EXTERNAL_TARGET petsc_external PARENT_SCOPE)
+endfunction()
+
+function(prk_autobuild_kokkos)
+  if(Kokkos_FOUND OR NOT PRK_AUTOBUILD_DEPS)
+    return()
+  endif()
+  find_package(Kokkos QUIET)
+  if(Kokkos_FOUND)
+    return()
+  endif()
+  message(STATUS "Kokkos: not found on system, fetching and building from source (GitHub: kokkos/kokkos)")
+
+  # OpenMP backend only, matching Cxx11/Makefile.legacy's own default (the
+  # Cuda backend is opt-in there via USE_PRK_KOKKOS_BACKEND=Cuda, which
+  # switches the compile rule to nvcc -x cu). Kokkos 4.4.01's CUDA backend
+  # also doesn't build against the CUDA 13 API on this machine (removed/
+  # changed cudaMemLocation, cudaStreamUpdateCaptureDependencies signatures)
+  # -- a real upstream incompatibility, not something to paper over here.
+  include(FetchContent)
+  set(Kokkos_ENABLE_OPENMP ON CACHE BOOL "" FORCE)
+  FetchContent_Declare(kokkos
+    GIT_REPOSITORY https://github.com/kokkos/kokkos.git
+    GIT_TAG        4.4.01
+    GIT_SHALLOW    TRUE)
+  FetchContent_MakeAvailable(kokkos)
+
+  set(Kokkos_FOUND TRUE PARENT_SCOPE)
+  set(Kokkos_AUTOBUILT TRUE PARENT_SCOPE)
+  set(Kokkos_EXTERNAL_TARGET kokkoscore PARENT_SCOPE)
+endfunction()
+
+function(prk_autobuild_raja)
+  if(RAJA_FOUND OR NOT PRK_AUTOBUILD_DEPS)
+    return()
+  endif()
+  find_package(RAJA QUIET)
+  if(RAJA_FOUND)
+    return()
+  endif()
+  message(STATUS "RAJA: not found on system, fetching and building from source (GitHub: LLNL/RAJA)")
+
+  include(FetchContent)
+  # RAJA's BLT build system wants the OpenMP switch as BLT's own ENABLE_OPENMP,
+  # not RAJA_ENABLE_OPENMP (that one only controls whether RAJA *uses* it once
+  # BLT has it on).
+  set(ENABLE_OPENMP ON CACHE BOOL "" FORCE)
+  set(RAJA_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+  set(RAJA_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(RAJA_ENABLE_EXERCISES OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(raja
+    GIT_REPOSITORY https://github.com/LLNL/RAJA.git
+    GIT_TAG        v2024.07.0
+    GIT_SHALLOW    TRUE
+    GIT_SUBMODULES_RECURSE TRUE)
+  FetchContent_MakeAvailable(raja)
+
+  set(RAJA_FOUND TRUE PARENT_SCOPE)
+  set(RAJA_AUTOBUILT TRUE PARENT_SCOPE)
+  set(RAJA_EXTERNAL_TARGET RAJA PARENT_SCOPE)
 endfunction()
