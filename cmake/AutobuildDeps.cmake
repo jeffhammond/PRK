@@ -207,6 +207,18 @@ function(prk_autobuild_kokkos)
   if(Kokkos_FOUND)
     return()
   endif()
+  if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    # Kokkos's own CMakeLists.txt unconditionally refuses in-source builds
+    # (checks the top-level CMAKE_SOURCE_DIR/CMAKE_BINARY_DIR, which
+    # FetchContent_MakeAvailable()/add_subdirectory() can't override --
+    # those are fixed once by the outermost project(), the same for every
+    # subdirectory). There's no way to autobuild Kokkos into an in-source
+    # configure; skip cleanly instead of letting Kokkos's own FATAL_ERROR
+    # surface confusingly mid-configure.
+    message(STATUS "Kokkos: skipped, autobuild needs an out-of-source build directory "
+                    "(e.g. cmake -S Cxx11 -B Cxx11/build) -- Kokkos itself refuses in-source builds")
+    return()
+  endif()
   message(STATUS "Kokkos: not found on system, fetching and building from source (GitHub: kokkos/kokkos)")
 
   # OpenMP backend only, matching Cxx11/Makefile.legacy's own default (the
@@ -234,6 +246,15 @@ function(prk_autobuild_raja)
   endif()
   find_package(RAJA QUIET)
   if(RAJA_FOUND)
+    return()
+  endif()
+  if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    # RAJA's BLT build system (SetupBLT.cmake) has the same unconditional
+    # in-source-build guard as Kokkos, checked against the top-level
+    # CMAKE_SOURCE_DIR/CMAKE_BINARY_DIR -- see the matching comment in
+    # prk_autobuild_kokkos() above.
+    message(STATUS "RAJA: skipped, autobuild needs an out-of-source build directory "
+                    "(e.g. cmake -S Cxx11 -B Cxx11/build) -- RAJA/BLT itself refuses in-source builds")
     return()
   endif()
   message(STATUS "RAJA: not found on system, fetching and building from source (GitHub: LLNL/RAJA)")

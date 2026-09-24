@@ -238,7 +238,7 @@ allfortrancoarray:
 	$(MAKE) -C FORTRAN -f Makefile.legacy coarray
 
 allcxx:
-	$(MAKE) -C Cxx11
+	$(MAKE) -C Cxx11 -f Makefile.legacy
 
 allc1z:
 	$(MAKE) -C C1z -f Makefile.legacy
@@ -335,7 +335,7 @@ clean:
 	cd SERIAL/PIC;              $(MAKE) clean
 	cd SERIAL/AMR;              $(MAKE) clean
 	make -C FORTRAN -f Makefile.legacy clean
-	make -C Cxx11 clean
+	make -C Cxx11 -f Makefile.legacy clean
 	make -C C1z -f Makefile.legacy clean
 	rm -f stats.json
 
