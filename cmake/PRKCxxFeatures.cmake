@@ -100,6 +100,78 @@ function(prk_check_pstl_cxx)
   endif()
 endfunction()
 
+function(prk_check_openacc_cxx)
+  if(DEFINED PRK_OPENACC_FLAGS)
+    return()
+  endif()
+  # Only GNU and NVHPC have a real, working OpenACC C++ implementation
+  # among the compilers available here (Intel oneAPI never shipped one).
+  # Match the flags the Makefile's make.defs.gcc/make.defs.nvhpc use, but
+  # verify with a real compile+link probe rather than trusting compiler ID
+  # alone -- the same principle as the OpenMP-offload/CUDASTF probes above:
+  # a compiler can accept -fopenacc/-acc and still reject or silently
+  # miscompile a given pragma.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(_candidate "-fopenacc")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+    set(_candidate "-acc;-target=gpu;-Mlarge_arrays")
+  else()
+    set(_candidate "")
+  endif()
+  if(_candidate STREQUAL "")
+    set(PRK_OPENACC_FLAGS "" CACHE STRING "Compiler flags enabling C++ OpenACC")
+    message(STATUS "C++ OpenACC: not probed, no known flags for ${CMAKE_CXX_COMPILER_ID}")
+    return()
+  endif()
+  set(_src "int main() { int s = 0;\n#pragma acc parallel copy(s)\n  { s = 1; }\n  return s; }\n")
+  set(CMAKE_REQUIRED_FLAGS "${_candidate}")
+  check_cxx_source_compiles("${_src}" PRK_CXX_OPENACC_COMPILES)
+  unset(CMAKE_REQUIRED_FLAGS)
+  if(PRK_CXX_OPENACC_COMPILES)
+    set(PRK_OPENACC_FLAGS "${_candidate}" CACHE STRING "Compiler flags enabling C++ OpenACC")
+    message(STATUS "C++ OpenACC (${_candidate}): compiles and links")
+  else()
+    set(PRK_OPENACC_FLAGS "" CACHE STRING "Compiler flags enabling C++ OpenACC")
+    message(STATUS "C++ OpenACC: compiler rejected ${_candidate}")
+  endif()
+endfunction()
+
+function(prk_check_stdpar_cxx)
+  if(DEFINED PRK_STDPAR_WORKS)
+    return()
+  endif()
+  # NVHPC's nvc++ has its own GPU-offloading implementation of parallel
+  # <execution> algorithms behind -stdpar=gpu, independent of TBB/PSTL_WORKS
+  # (matches make.defs.nvhpc/make.defs.cuda's STDPARFLAG). Everywhere else,
+  # "stdpar" just means the standard library's TBB-backed parallel
+  # <execution>, which PRK_PSTL_WORKS already verified with a real link
+  # probe -- no extra flags needed there, just the same TBB::tbb link.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+    set(_candidate "-stdpar=gpu;-gpu=managed;-Minfo=accel;-cudalib=cublas,cutensor")
+    set(CMAKE_REQUIRED_FLAGS "${_candidate}")
+    set(_src "#include <execution>\n#include <vector>\n#include <algorithm>\nint main() { std::vector<int> v(10,1); std::sort(std::execution::par_unseq, v.begin(), v.end()); return v[0]; }\n")
+    check_cxx_source_compiles("${_src}" PRK_CXX_STDPAR_NVHPC_COMPILES)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(PRK_CXX_STDPAR_NVHPC_COMPILES)
+      set(PRK_STDPAR_FLAGS "${_candidate}" CACHE STRING "Compiler flags enabling GPU-offloaded stdpar")
+      set(PRK_STDPAR_WORKS TRUE CACHE BOOL "stdpar (parallel <execution>) is usable")
+      message(STATUS "C++ stdpar (NVHPC GPU, ${_candidate}): compiles and links")
+    else()
+      set(PRK_STDPAR_FLAGS "" CACHE STRING "Compiler flags enabling GPU-offloaded stdpar")
+      set(PRK_STDPAR_WORKS FALSE CACHE BOOL "stdpar (parallel <execution>) is usable")
+      message(STATUS "C++ stdpar: NVHPC rejected ${_candidate}")
+    endif()
+  elseif(PRK_PSTL_WORKS)
+    set(PRK_STDPAR_FLAGS "" CACHE STRING "Compiler flags enabling GPU-offloaded stdpar")
+    set(PRK_STDPAR_WORKS TRUE CACHE BOOL "stdpar (parallel <execution>) is usable")
+    message(STATUS "C++ stdpar: using TBB-backed parallel <execution> (same as PSTL)")
+  else()
+    set(PRK_STDPAR_FLAGS "" CACHE STRING "Compiler flags enabling GPU-offloaded stdpar")
+    set(PRK_STDPAR_WORKS FALSE CACHE BOOL "stdpar (parallel <execution>) is usable")
+    message(STATUS "C++ stdpar: not available (no NVHPC GPU offload, no working TBB-backed PSTL)")
+  endif()
+endfunction()
+
 function(prk_check_cudastf_cuda cudax_include libcudacxx_include)
   if(DEFINED PRK_CUDASTF_WORKS)
     return()

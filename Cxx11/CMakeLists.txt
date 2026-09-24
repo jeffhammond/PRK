@@ -45,7 +45,12 @@ find_package(OpenMP COMPONENTS CXX)
 find_package(MPI COMPONENTS CXX)
 find_package(BLAS)
 find_package(OpenCL)
-find_package(TBB QUIET)
+# TBB is installed here via the oneAPI toolkit, but only on CMAKE_PREFIX_PATH
+# when setvars.sh has been sourced; hint at its standalone install location
+# too so a plain (un-sourced) GNU build can still find and use it -- it's a
+# real, present dependency, not one to silently skip just because the
+# environment wasn't activated.
+find_package(TBB QUIET PATHS /opt/intel/oneapi/tbb/*/lib/cmake/tbb)
 
 find_path(PRK_BOOST_COMPUTE_INCLUDE_DIR boost/compute.hpp)
 if(PRK_BOOST_COMPUTE_INCLUDE_DIR AND OpenCL_FOUND)
@@ -172,6 +177,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKCxxFeatures.cmake")
 prk_check_openmp_offload_cxx()
 prk_check_range_v3_cxx()
 prk_check_pstl_cxx()
+prk_check_openacc_cxx()
+prk_check_stdpar_cxx()
 if(PRK_WITH_CUDA AND PRK_CUDASTF_FOUND)
   prk_check_cudastf_cuda("${PRK_CUDASTF_CUDAX_INCLUDE_DIR}" "${PRK_CUDASTF_LIBCUDACXX_INCLUDE_DIR}")
 endif()
@@ -461,7 +468,13 @@ if(TBB_FOUND)
   add_custom_target(cxx11_tbb DEPENDS
     p2p-innerloop-tbb p2p-tbb stencil-tbb transpose-tbb nstream-tbb p2p-hyperplane-tbb p2p-tasks-tbb)
 
-  if(PRK_PSTL_WORKS)
+  # NVHPC's own <execution> header predefines a global `namespace exec =
+  # std::experimental::execution;` alias (its pre-standardization PSTL,
+  # which has no par_unseq) -- prk_pstl.h's own `namespace exec = ...`
+  # then collides with it ("namespace exec has already been defined").
+  # NVHPC's real parallel story is stdpar/OpenACC (wired in below), not
+  # this TBB-backed PSTL group, so just skip it there.
+  if(PRK_PSTL_WORKS AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
     # prk_ranges.h needs exactly one of USE_GCC_RANGES/USE_BOOST_IRANGE/
     # USE_RANGES_TS defined; range-v3 is what's available here.
     set(_pstl_defs USE_RANGES_TS)
@@ -555,11 +568,55 @@ else()
   message(STATUS "Cxx11 raja: skipped, RAJA not available")
 endif()
 
+# --- OpenACC ----------------------------------------------------------
+
+if(PRK_OPENACC_FLAGS)
+  prk_cxx_executable(nstream-openacc         SOURCES nstream-openacc.cc         FLAGS ${PRK_OPENACC_FLAGS})
+  prk_cxx_executable(stencil-openacc         SOURCES stencil-openacc.cc         FLAGS ${PRK_OPENACC_FLAGS})
+  prk_cxx_executable(transpose-openacc       SOURCES transpose-openacc.cc       FLAGS ${PRK_OPENACC_FLAGS})
+  prk_cxx_executable(p2p-hyperplane-openacc  SOURCES p2p-hyperplane-openacc.cc  FLAGS ${PRK_OPENACC_FLAGS})
+  add_custom_target(cxx11_openacc DEPENDS
+    nstream-openacc stencil-openacc transpose-openacc p2p-hyperplane-openacc)
+else()
+  message(STATUS "Cxx11 openacc: skipped, no working OpenACC found")
+endif()
+
+# --- stdpar -------------------------------------------------------------
+
+if(PRK_STDPAR_WORKS)
+  # nstream-stdpar.cc/transpose-stdpar.cc use Thrust's header-only iterator
+  # helpers (zip_iterator, counting_iterator) on plain std::vector, not CUDA
+  # device code -- they compile fine with any host compiler, they just need
+  # the Thrust headers on the include path. Thrust's zip_iterator drags in
+  # its CUDA-backend config (CUB), which needs cudaError_t from
+  # cuda_runtime_api.h even for a plain host build -- add CUDAToolkit's
+  # include dir too, not just the cccl/thrust headers. TBB is only needed
+  # for the libstdc++/libc++ TBB-backed PSTL path, not NVHPC's GPU offload.
+  set(_stdpar_libs "")
+  if(TBB_FOUND)
+    list(APPEND _stdpar_libs TBB::tbb)
+  endif()
+  set(_stdpar_includes ${PRK_THRUST_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+  prk_cxx_executable(nstream-stdpar SOURCES nstream-stdpar.cc LIBS ${_stdpar_libs} FLAGS ${PRK_STDPAR_FLAGS} INCLUDES ${_stdpar_includes})
+  set(_cxx11_stdpar_targets nstream-stdpar)
+  # transpose-stdpar.cc uses a raw `__device__`-annotated lambda, which only
+  # nvcc/nvc++ understand (nvc++'s -stdpar=gpu recognizes CUDA C++ device
+  # annotations; plain g++/icpx's TBB-backed PSTL fallback does not).
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+    prk_cxx_executable(transpose-stdpar SOURCES transpose-stdpar.cc LIBS ${_stdpar_libs} FLAGS ${PRK_STDPAR_FLAGS} INCLUDES ${_stdpar_includes})
+    list(APPEND _cxx11_stdpar_targets transpose-stdpar)
+  else()
+    message(STATUS "Cxx11 transpose-stdpar: skipped, needs nvc++'s -stdpar=gpu (raw __device__ lambda)")
+  endif()
+  add_custom_target(cxx11_stdpar DEPENDS ${_cxx11_stdpar_targets})
+else()
+  message(STATUS "Cxx11 stdpar: skipped, no NVHPC GPU offload and no working TBB-backed PSTL")
+endif()
+
 # --- unavailable on this machine: detect-only, skip cleanly ---------------
-# SYCL/DPC++/oneAPI, HIP/ROCm, OCCA, Halide, HPX, UPC++, OpenSHMEM, OpenACC
-# (broken nvptx offload toolchain here, same as FORTRAN/C1z), and NVHPC-only
-# stdpar all have no working toolchain on this machine.
-message(STATUS "Cxx11 sycl/dpcpp/oneapi/hip/occa/halide/hpx/upcxx/oshmem/openacc/stdpar: skipped, no toolchain found")
+# SYCL/DPC++/oneAPI (GPU offload), HIP/ROCm, OCCA, Halide, HPX, UPC++, and
+# OpenSHMEM have no working toolchain on this machine.
+message(STATUS "Cxx11 sycl/dpcpp/oneapi/hip/occa/halide/hpx/upcxx/oshmem: skipped, no toolchain found")
 
 # --- CTest ----------------------------------------------------------------
 
@@ -656,4 +713,22 @@ if(RAJA_FOUND)
   prk_cxx_test(cxx11_raja_stencil   COMMAND stencil-raja 10 1000)
   prk_cxx_test(cxx11_raja_transpose COMMAND transpose-raja 10 1024)
   prk_cxx_test(cxx11_raja_nstream   COMMAND nstream-raja 10 16777216)
+endif()
+
+if(PRK_OPENACC_FLAGS)
+  prk_cxx_test(cxx11_openacc_nstream        COMMAND nstream-openacc 10 16777216)
+  prk_cxx_test(cxx11_openacc_stencil        COMMAND stencil-openacc 10 1000)
+  prk_cxx_test(cxx11_openacc_transpose      COMMAND transpose-openacc 10 1024 32)
+  # No chunk-size arg: matches the only invocation ci/build-run-prk.sh ever
+  # used (commented out there, but this is what it tested). The chunked
+  # (nc>1) code path has a real, separate OpenACC codegen bug (confirmed by
+  # isolating it outside CI's own tested surface) -- out of scope here.
+  prk_cxx_test(cxx11_openacc_p2p_hyperplane COMMAND p2p-hyperplane-openacc 10 1024)
+endif()
+
+if(PRK_STDPAR_WORKS)
+  prk_cxx_test(cxx11_stdpar_nstream   COMMAND nstream-stdpar 10 16777216)
+  if(TARGET transpose-stdpar)
+    prk_cxx_test(cxx11_stdpar_transpose COMMAND transpose-stdpar 10 1024)
+  endif()
 endif()
