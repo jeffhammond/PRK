@@ -76,6 +76,107 @@ function(prk_check_range_v3_cxx)
   endif()
 endfunction()
 
+# range-v3 (ericniebler/range-v3) was a pre-C++20 hack for getting Ranges
+# before the standard had them; prefer the real thing (std::ranges) when it
+# actually works, matching prk_ranges.h's USE_GCC_RANGES/USE_BOOST_IRANGE/
+# USE_RANGES_TS macro selection. prk::range()'s two call patterns need
+# different levels of ranges support, so they're probed and selected
+# independently:
+#   "basic"  -- prk::range(start,end): std::views::iota alone, C++20 is
+#               enough. Priority: STL (C++20) -> Boost.Irange -> range-v3.
+#   "full"   -- prk::range(start,end,blocking)/prk::range2(): also needs
+#               views::stride and views::cartesian_product, which are C++23
+#               additions; Boost.Hana's cartesian_product doesn't compose
+#               with boost::irange without real glue code (not worth
+#               writing), so there's no usable Boost path here. Priority:
+#               STL (C++23) -> range-v3.
+# Each tier sets _DEFS (compile definition(s) for prk_ranges.h), _INCLUDES
+# (extra include dirs, only needed for range-v3), and _CXX_STANDARD (the
+# CXX_STANDARD target property to request, empty if the project default is
+# sufficient).
+function(prk_check_ranges_cxx)
+  if(DEFINED PRK_RANGES_BASIC_DEFS)
+    return()
+  endif()
+
+  # Pass the standard as a raw flag (CMAKE_REQUIRED_FLAGS) rather than via
+  # the CMAKE_CXX_STANDARD variable: that goes through CMake's own
+  # per-compiler dialect-flag table, which doesn't know a C++23 flag for
+  # every compiler ID here (NVHPC) and hard-errors the try_compile itself
+  # rather than just failing the probe. Clear CMAKE_CXX_STANDARD/_REQUIRED
+  # locally too (function-scoped, doesn't leak to the caller) -- otherwise
+  # try_compile still adds its own -std=gnu++17 (from the project's global
+  # CMAKE_CXX_STANDARD 17) *after* our CMAKE_REQUIRED_FLAGS, and the later
+  # -std= flag wins, silently discarding the one we asked for.
+  set(CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD_REQUIRED)
+
+  # --- basic: prk::range(start,end) -----------------------------------
+  set(_basic_found FALSE)
+  if(PRK_CXX20_SUPPORTED)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++20")
+    check_cxx_source_compiles(
+      "#include <ranges>\nint main() { auto r = std::views::iota(0,10); for (auto i : r) { (void)i; } return 0; }\n"
+      PRK_RANGES_BASIC_STL_COMPILES)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(PRK_RANGES_BASIC_STL_COMPILES)
+      set(PRK_RANGES_BASIC_DEFS USE_GCC_RANGES CACHE STRING "prk_ranges.h backend (basic)" FORCE)
+      set(PRK_RANGES_BASIC_INCLUDES "" CACHE STRING "extra include dirs for the basic ranges backend" FORCE)
+      set(PRK_RANGES_BASIC_CXX_STANDARD 20 CACHE STRING "CXX_STANDARD needed for the basic ranges backend" FORCE)
+      set(_basic_found TRUE)
+      message(STATUS "C++ ranges (basic): std::ranges (C++20)")
+    endif()
+  endif()
+  if(NOT _basic_found)
+    find_path(PRK_BOOST_IRANGE_INCLUDE_DIR boost/range/irange.hpp)
+    if(PRK_BOOST_IRANGE_INCLUDE_DIR)
+      set(CMAKE_REQUIRED_INCLUDES "${PRK_BOOST_IRANGE_INCLUDE_DIR}")
+      check_cxx_source_compiles(
+        "#include \"boost/range/irange.hpp\"\nint main() { auto r = boost::irange(0,10); for (auto i : r) { (void)i; } return 0; }\n"
+        PRK_RANGES_BASIC_BOOST_COMPILES)
+      unset(CMAKE_REQUIRED_INCLUDES)
+      if(PRK_RANGES_BASIC_BOOST_COMPILES)
+        set(PRK_RANGES_BASIC_DEFS USE_BOOST_IRANGE CACHE STRING "prk_ranges.h backend (basic)" FORCE)
+        set(PRK_RANGES_BASIC_INCLUDES "" CACHE STRING "extra include dirs for the basic ranges backend" FORCE)
+        set(PRK_RANGES_BASIC_CXX_STANDARD "" CACHE STRING "CXX_STANDARD needed for the basic ranges backend" FORCE)
+        set(_basic_found TRUE)
+        message(STATUS "C++ ranges (basic): Boost.Range irange")
+      endif()
+    endif()
+  endif()
+  if(NOT _basic_found)
+    prk_check_range_v3_cxx()
+    set(PRK_RANGES_BASIC_DEFS USE_RANGES_TS CACHE STRING "prk_ranges.h backend (basic)" FORCE)
+    set(PRK_RANGES_BASIC_INCLUDES "${PRK_RANGE_V3_INCLUDE_DIR}" CACHE STRING "extra include dirs for the basic ranges backend" FORCE)
+    set(PRK_RANGES_BASIC_CXX_STANDARD "" CACHE STRING "CXX_STANDARD needed for the basic ranges backend" FORCE)
+    message(STATUS "C++ ranges (basic): range-v3 (fallback)")
+  endif()
+
+  # --- full: prk::range(start,end,blocking) / prk::range2() -----------
+  set(_full_found FALSE)
+  if(PRK_CXX23_SUPPORTED)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++23")
+    check_cxx_source_compiles(
+      "#include <ranges>\nint main() { auto a = std::views::iota(0,10) | std::views::stride(2); auto b = std::views::iota(0,3); auto cp = std::views::cartesian_product(b,b); for (auto t : cp) { (void)t; } return 0; }\n"
+      PRK_RANGES_FULL_STL_COMPILES)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(PRK_RANGES_FULL_STL_COMPILES)
+      set(PRK_RANGES_FULL_DEFS USE_GCC_RANGES CACHE STRING "prk_ranges.h backend (full)" FORCE)
+      set(PRK_RANGES_FULL_INCLUDES "" CACHE STRING "extra include dirs for the full ranges backend" FORCE)
+      set(PRK_RANGES_FULL_CXX_STANDARD 23 CACHE STRING "CXX_STANDARD needed for the full ranges backend" FORCE)
+      set(_full_found TRUE)
+      message(STATUS "C++ ranges (full, stride+cartesian_product): std::ranges (C++23)")
+    endif()
+  endif()
+  if(NOT _full_found)
+    prk_check_range_v3_cxx()
+    set(PRK_RANGES_FULL_DEFS USE_RANGES_TS CACHE STRING "prk_ranges.h backend (full)" FORCE)
+    set(PRK_RANGES_FULL_INCLUDES "${PRK_RANGE_V3_INCLUDE_DIR}" CACHE STRING "extra include dirs for the full ranges backend" FORCE)
+    set(PRK_RANGES_FULL_CXX_STANDARD "" CACHE STRING "CXX_STANDARD needed for the full ranges backend" FORCE)
+    message(STATUS "C++ ranges (full, stride+cartesian_product): range-v3 (fallback)")
+  endif()
+endfunction()
+
 function(prk_check_pstl_cxx)
   if(DEFINED PRK_PSTL_WORKS)
     return()

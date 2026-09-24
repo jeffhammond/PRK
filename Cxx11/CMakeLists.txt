@@ -33,6 +33,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag(-std=c++20 PRK_CXX20_SUPPORTED)
+check_cxx_compiler_flag(-std=c++23 PRK_CXX23_SUPPORTED)
 
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../common/PRKVERSION" _prkversion_line REGEX "^PRKVERSION=")
 string(REGEX REPLACE "^PRKVERSION=(.*)$" "\\1" PRK_VERSION_DEFINE "${_prkversion_line}")
@@ -175,7 +176,7 @@ prk_autobuild_raja()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKCxxFeatures.cmake")
 prk_check_openmp_offload_cxx()
-prk_check_range_v3_cxx()
+prk_check_ranges_cxx()
 prk_check_pstl_cxx()
 prk_check_openacc_cxx()
 prk_check_stdpar_cxx()
@@ -193,7 +194,7 @@ endif()
 
 message(STATUS "Cxx11: OpenMP ${OpenMP_CXX_FOUND}, MPI ${MPI_CXX_FOUND}, BLAS ${BLAS_FOUND}, "
                "OpenCL ${OpenCL_FOUND}, Boost.Compute ${PRK_BOOST_COMPUTE_FOUND}, TBB ${TBB_FOUND}, "
-               "range-v3 ${PRK_RANGE_V3_FOUND}, PSTL ${PRK_PSTL_WORKS}, "
+               "ranges(basic) ${PRK_RANGES_BASIC_DEFS}, ranges(full) ${PRK_RANGES_FULL_DEFS}, PSTL ${PRK_PSTL_WORKS}, "
                "CUDA ${PRK_WITH_CUDA}, NVSHMEM ${PRK_NVSHMEM_FOUND}, CUDASTF ${PRK_CUDASTF_FOUND}, "
                "Kokkos ${Kokkos_FOUND}, RAJA ${RAJA_FOUND}, target offload ${PRK_WITH_TARGET} "
                "(compiler: ${CMAKE_CXX_COMPILER_ID})")
@@ -356,9 +357,12 @@ if(PRK_WITH_CUDA)
   if(PRK_THRUST_HOST_WORKS)
     prk_cxx_executable(nstream-host-thrust   SOURCES nstream-host-thrust.cc   INCLUDES ${PRK_THRUST_INCLUDE_DIR})
     prk_cxx_executable(transpose-host-thrust SOURCES transpose-host-thrust.cc INCLUDES ${PRK_THRUST_INCLUDE_DIR})
-    if(PRK_RANGE_V3_FOUND)
-      target_include_directories(transpose-host-thrust PRIVATE ${PRK_RANGE_V3_INCLUDE_DIR})
-      target_compile_definitions(transpose-host-thrust PRIVATE USE_RANGES_TS)
+    if(PRK_RANGES_BASIC_DEFS)
+      target_include_directories(transpose-host-thrust PRIVATE ${PRK_RANGES_BASIC_INCLUDES})
+      target_compile_definitions(transpose-host-thrust PRIVATE ${PRK_RANGES_BASIC_DEFS})
+      if(PRK_RANGES_BASIC_CXX_STANDARD)
+        set_target_properties(transpose-host-thrust PROPERTIES CXX_STANDARD ${PRK_RANGES_BASIC_CXX_STANDARD})
+      endif()
     endif()
     list(APPEND _thrust_targets nstream-host-thrust transpose-host-thrust)
   else()
@@ -476,16 +480,20 @@ if(TBB_FOUND)
   # this TBB-backed PSTL group, so just skip it there.
   if(PRK_PSTL_WORKS AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
     # prk_ranges.h needs exactly one of USE_GCC_RANGES/USE_BOOST_IRANGE/
-    # USE_RANGES_TS defined; range-v3 is what's available here.
-    set(_pstl_defs USE_RANGES_TS)
+    # USE_RANGES_TS defined; prk_check_ranges_cxx() picked the best one
+    # available (STL preferred, then Boost, then range-v3 last).
+    set(_pstl_defs ${PRK_RANGES_BASIC_DEFS})
     # prk_pstl.h's `namespace exec = ...` only auto-defines for GCC
     # (__GNUC__ >= 9); Clang-family compilers like icpx (__GNUC__ 4, for
     # compatibility) need to be told explicitly which PSTL backend to use.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
       list(APPEND _pstl_defs USE_ONEAPI_DPL)
     endif()
-    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS ${_pstl_defs})
-    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS ${_pstl_defs})
+    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${_pstl_defs})
+    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${_pstl_defs})
+    if(PRK_RANGES_BASIC_CXX_STANDARD)
+      set_target_properties(stencil-pstl transpose-pstl PROPERTIES CXX_STANDARD ${PRK_RANGES_BASIC_CXX_STANDARD})
+    endif()
     add_custom_target(cxx11_pstl DEPENDS stencil-pstl transpose-pstl)
     # nstream-pstl.cc unconditionally `#include <ranges>` and uses
     # std::ranges directly (nothing to do with prk_ranges.h/range-v3),
@@ -504,18 +512,49 @@ else()
   message(STATUS "Cxx11 tbb/pstl: skipped, TBB not found")
 endif()
 
-if(PRK_RANGE_V3_FOUND)
+if(PRK_RANGES_BASIC_DEFS)
   # prk::range() (used by every one of these except nstream-stl/
   # nstream-ranges) comes from prk_ranges.h, which requires exactly one of
   # USE_GCC_RANGES/USE_BOOST_IRANGE/USE_RANGES_TS defined or it #errors;
-  # range-v3 is what's actually available here, so USE_RANGES_TS throughout.
-  prk_cxx_executable(stencil-stl   SOURCES stencil-stl.cc   INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
-  prk_cxx_executable(transpose-stl SOURCES transpose-stl.cc INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
+  # prk_check_ranges_cxx() already picked the best backend available (STL
+  # preferred, then Boost, then range-v3 last).
+  prk_cxx_executable(stencil-stl   SOURCES stencil-stl.cc   INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${PRK_RANGES_BASIC_DEFS})
+  prk_cxx_executable(transpose-stl SOURCES transpose-stl.cc INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${PRK_RANGES_BASIC_DEFS})
   add_custom_target(cxx11_stl DEPENDS stencil-stl transpose-stl)
+  if(PRK_RANGES_BASIC_CXX_STANDARD)
+    set_target_properties(stencil-stl transpose-stl PROPERTIES CXX_STANDARD ${PRK_RANGES_BASIC_CXX_STANDARD})
+  endif()
 
-  prk_cxx_executable(stencil-ranges   SOURCES stencil-ranges.cc   INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
-  prk_cxx_executable(transpose-ranges SOURCES transpose-ranges.cc INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
-  add_custom_target(cxx11_ranges DEPENDS stencil-ranges transpose-ranges)
+  add_custom_target(cxx11_ranges)
+
+  # stencil_ranges.hpp (included by stencil-ranges.cc) calls range-v3's
+  # `ranges::views::...`/`ranges::stride_view` API directly, bypassing
+  # prk_ranges.h's USE_GCC_RANGES/USE_BOOST_IRANGE/USE_RANGES_TS macro
+  # abstraction entirely -- it needs range-v3 itself, not whatever backend
+  # the basic/full tiers picked (`ranges::` is range-v3's own namespace,
+  # distinct from `std::ranges::`).
+  prk_check_range_v3_cxx()
+  if(PRK_RANGE_V3_FOUND)
+    prk_cxx_executable(stencil-ranges SOURCES stencil-ranges.cc INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
+    add_dependencies(cxx11_ranges stencil-ranges)
+  else()
+    message(STATUS "Cxx11 stencil-ranges: skipped, range-v3 not available (hardcodes its own ranges::... API)")
+  endif()
+
+  # transpose-ranges.cc additionally needs prk::range2()/tiled blocking
+  # ranges (views::stride + views::cartesian_product) -- the "full" tier,
+  # which range-v3 always supports but plain C++20 std::ranges/Boost.Irange
+  # don't (that needs C++23, or real range-v3-equivalent glue code for
+  # Boost -- see prk_ranges.h).
+  if(PRK_RANGES_FULL_DEFS)
+    prk_cxx_executable(transpose-ranges SOURCES transpose-ranges.cc INCLUDES ${PRK_RANGES_FULL_INCLUDES} DEFS ${PRK_RANGES_FULL_DEFS})
+    if(PRK_RANGES_FULL_CXX_STANDARD)
+      set_target_properties(transpose-ranges PROPERTIES CXX_STANDARD ${PRK_RANGES_FULL_CXX_STANDARD})
+    endif()
+    add_dependencies(cxx11_ranges transpose-ranges)
+  else()
+    message(STATUS "Cxx11 transpose-ranges: skipped, no ranges backend supports cartesian_product/tiling here")
+  endif()
 
   # nstream-stl.cc/nstream-ranges.cc unconditionally `#include <ranges>` and
   # use std::ranges directly (nothing to do with prk_ranges.h/range-v3),
@@ -530,7 +569,7 @@ if(PRK_RANGE_V3_FOUND)
     message(STATUS "Cxx11 nstream-stl/nstream-ranges: skipped, compiler has no C++20 <ranges> support")
   endif()
 else()
-  message(STATUS "Cxx11 stl/ranges: skipped, range-v3 not available")
+  message(STATUS "Cxx11 stl/ranges: skipped, no ranges backend available")
 endif()
 
 # --- Kokkos / RAJA (autobuilt) ---------------------------------------------
@@ -701,6 +740,32 @@ if(OpenCL_FOUND)
   prk_cxx_test(cxx11_opencl_stencil   COMMAND stencil-opencl 10 1000)
   prk_cxx_test(cxx11_opencl_transpose COMMAND transpose-opencl 10 1024)
   prk_cxx_test(cxx11_opencl_nstream   COMMAND nstream-opencl 10 16777216)
+endif()
+
+if(TARGET stencil-stl)
+  prk_cxx_test(cxx11_stl_stencil   COMMAND stencil-stl 10 1000)
+  prk_cxx_test(cxx11_stl_transpose COMMAND transpose-stl 10 1024)
+endif()
+if(TARGET nstream-stl)
+  prk_cxx_test(cxx11_stl_nstream COMMAND nstream-stl 10 16777216)
+endif()
+
+if(TARGET stencil-ranges)
+  prk_cxx_test(cxx11_ranges_stencil COMMAND stencil-ranges 10 1000)
+endif()
+if(TARGET transpose-ranges)
+  prk_cxx_test(cxx11_ranges_transpose COMMAND transpose-ranges 10 1024)
+endif()
+if(TARGET nstream-ranges)
+  prk_cxx_test(cxx11_ranges_nstream COMMAND nstream-ranges 10 16777216)
+endif()
+
+if(TARGET stencil-pstl)
+  prk_cxx_test(cxx11_pstl_stencil   COMMAND stencil-pstl 10 1000)
+  prk_cxx_test(cxx11_pstl_transpose COMMAND transpose-pstl 10 1024)
+endif()
+if(TARGET nstream-pstl)
+  prk_cxx_test(cxx11_pstl_nstream COMMAND nstream-pstl 10 16777216)
 endif()
 
 if(Kokkos_FOUND)
