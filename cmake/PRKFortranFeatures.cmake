@@ -9,6 +9,7 @@ across common/make.defs.*.
 #]=======================================================================]
 
 include(CheckFortranSourceCompiles)
+include(CheckFortranSourceRuns)
 
 function(prk_check_coarray_single)
   if(DEFINED PRK_COARRAY_SINGLE_FLAG)
@@ -78,9 +79,29 @@ function(prk_check_openmp_offload)
   if(DEFINED PRK_OPENMP_OFFLOAD_FLAG)
     return()
   endif()
-  set(_src "program main\n  integer :: i, s\n  s = 0\n  !$omp target map(tofrom: s)\n  s = 1\n  !$omp end target\nend program main\n")
+  # Actually run the probe, not just compile it: on this machine gfortran-14
+  # accepts -fopenmp/-foffload=-O3 and compiles real *-openmp-target*.F90
+  # sources cleanly, but executing them segfaults or silently produces wrong
+  # answers (a broken offload runtime, not a compile-time issue at all) --
+  # the same "detected but broken" class of problem as the C++/OpenACC
+  # offload toolchain found elsewhere this session, just surfacing only at
+  # runtime here. stop 1 if the target region didn't actually run.
+  set(_src "program main\n  integer :: s\n  s = 0\n  !$omp target map(tofrom: s)\n  s = 1\n  !$omp end target\n  if (s /= 1) stop 1\nend program main\n")
   if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    set(_candidate "-fopenmp -foffload=-O3")
+    # Must be a CMake list (semicolon-separated), not a plain string with an
+    # embedded space: CMAKE_REQUIRED_FLAGS below tolerates either, but
+    # target_compile_options()/target_link_options() (used when this value
+    # is later passed as FLAGS to prk_fortran_executable()) do not -- a
+    # plain-string value becomes a single, malformed shell argument
+    # ("-fopenmp -foffload=-O3" as one token) that gfortran rejects.
+    # -DGPU_SCHEDULE="" matches make.defs.gcc's own OFFLOADFLAG: the
+    # *-openmp-target*.F90 sources use GPU_SCHEDULE as a raw macro token
+    # appended directly after `collapse(2)` inside `!$omp` directives (via
+    # Fortran's -cpp preprocessing), expected to expand to nothing on GNU
+    # (other toolchains define it as e.g. schedule(static,1)) -- without
+    # this define those directives fail to parse at all, a genuine
+    # separate requirement from just getting -fopenmp/-foffload accepted.
+    set(_candidate "-fopenmp;-foffload=-O3;-DGPU_SCHEDULE=")
   else()
     set(_candidate "")
   endif()
@@ -90,13 +111,13 @@ function(prk_check_openmp_offload)
     return()
   endif()
   set(CMAKE_REQUIRED_FLAGS "${_candidate}")
-  check_fortran_source_compiles("${_src}" PRK_OPENMP_OFFLOAD_COMPILES SRC_EXT F90)
+  check_fortran_source_runs("${_src}" PRK_OPENMP_OFFLOAD_RUNS SRC_EXT F90)
   unset(CMAKE_REQUIRED_FLAGS)
-  if(PRK_OPENMP_OFFLOAD_COMPILES)
+  if(PRK_OPENMP_OFFLOAD_RUNS)
     set(PRK_OPENMP_OFFLOAD_FLAG "${_candidate}" CACHE STRING "Compiler flags enabling OpenMP target offload")
-    message(STATUS "Fortran OpenMP target offload (${_candidate}): compiles")
+    message(STATUS "Fortran OpenMP target offload (${_candidate}): compiles and runs")
   else()
     set(PRK_OPENMP_OFFLOAD_FLAG "" CACHE STRING "Compiler flags enabling OpenMP target offload")
-    message(STATUS "Fortran OpenMP target offload: compiler rejected ${_candidate}")
+    message(STATUS "Fortran OpenMP target offload: compiled but failed to run correctly (broken offload runtime)")
   endif()
 endfunction()
