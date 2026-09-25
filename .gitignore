@@ -150,8 +150,10 @@ Cxx11/dgemm-stdpar
 Cxx11/dgemm-sycl
 Cxx11/dgemm-vector
 Cxx11/dgemm-vector-raja
+Cxx11/sgemm-cblas
 Cxx11/sgemm-cublas
 Cxx11/sgemm-hipblas
+Cxx11/xgemm-cblas
 Cxx11/xgemm-cublas
 Cxx11/grid*.cl
 Cxx11/nstream
@@ -165,6 +167,7 @@ Cxx11/nstream-onedpl
 Cxx11/nstream-executors
 Cxx11/nstream-halide
 Cxx11/nstream-hip
+Cxx11/nstream-device-thrust
 Cxx11/nstream-hipblas
 Cxx11/nstream-hipstl
 Cxx11/nstream-host-thrust
@@ -265,6 +268,7 @@ Cxx11/transpose-a2a-mpi-nccl
 Cxx11/transpose-a2a-mpi
 Cxx11/transpose-a2a-nvshmem
 Cxx11/transpose-async
+Cxx11/transpose-cblas
 Cxx11/transpose-cilk
 Cxx11/transpose-cublas
 Cxx11/transpose-cuda
