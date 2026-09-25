@@ -699,7 +699,15 @@ if(PRK_STDPAR_WORKS)
   if(TBB_FOUND)
     list(APPEND _stdpar_libs TBB::tbb)
   endif()
-  set(_stdpar_includes ${PRK_THRUST_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+  set(_stdpar_includes ${PRK_THRUST_INCLUDE_DIR})
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+    # nvc++ bundles its own complete, self-consistent CUDA toolkit headers
+    # (needed for the -stdpar=gpu path anyway); adding the system
+    # CUDAToolkit's include dir on top mixes the two and nvc++ rejects it
+    # outright: "CUDA compiler and CUDA toolkit headers are incompatible".
+    # Only host compilers without their own bundled CUDA runtime need this.
+    list(APPEND _stdpar_includes ${CUDAToolkit_INCLUDE_DIRS})
+  endif()
   prk_cxx_executable(nstream-stdpar SOURCES nstream-stdpar.cc LIBS ${_stdpar_libs} FLAGS ${PRK_STDPAR_FLAGS} INCLUDES ${_stdpar_includes})
   set(_cxx11_stdpar_targets nstream-stdpar)
   # transpose-stdpar.cc uses a raw `__device__`-annotated lambda, which only

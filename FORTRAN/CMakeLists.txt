@@ -296,8 +296,12 @@ if(PRK_WITH_STDPAR)
   add_custom_target(fortran_stdpar DEPENDS nstream-stdpar stencil-stdpar transpose-stdpar dgemm-stdpar)
 endif()
 if(PRK_WITH_CUFORTRAN)
-  prk_fortran_executable(nstream-cufortran   SOURCES nstream-cufortran.F90)
-  prk_fortran_executable(transpose-cufortran SOURCES transpose-cufortran.F90)
+  # These use CUDA Fortran's <<<...>>> kernel-launch chevron syntax, which
+  # nvfortran only parses with -cuda enabled (matches make.defs.nvhpc's own
+  # CUFORTFLAG=-cuda -gpu=managed -acc) -- without it, it's a hard syntax
+  # error, not just a missing optimization.
+  prk_fortran_executable(nstream-cufortran   SOURCES nstream-cufortran.F90   FLAGS -cuda -gpu=managed -acc)
+  prk_fortran_executable(transpose-cufortran SOURCES transpose-cufortran.F90 FLAGS -cuda -gpu=managed -acc)
   add_custom_target(fortran_cufortran DEPENDS nstream-cufortran transpose-cufortran)
 endif()
 if(NOT PRK_WITH_STDPAR AND NOT PRK_WITH_CUFORTRAN)
