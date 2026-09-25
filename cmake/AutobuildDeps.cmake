@@ -267,6 +267,17 @@ function(prk_autobuild_raja)
   set(RAJA_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
   set(RAJA_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(RAJA_ENABLE_EXERCISES OFF CACHE BOOL "" FORCE)
+  # RAJA_ENABLE_TESTS only controls RAJA's own tests; camp (RAJA's tpl
+  # dependency) has its own gtest suite gated by BLT's top-level
+  # ENABLE_TESTS instead, which still builds+runs (via GoogleTestAddTests'
+  # build-time test discovery) without this. Under toolchains whose built
+  # binaries need extra runtime environment (e.g. Intel oneAPI's
+  # LD_LIBRARY_PATH for libimf.so, which a CMAKE_TOOLCHAIN_FILE's
+  # set(ENV{...}) only applies during configure, not to the separate
+  # `cmake --build` process afterward), those internal test binaries fail
+  # at build time even though every real PRK/RAJA/Kokkos target is fine --
+  # we don't consume camp's own test suite, so just turn it off too.
+  set(ENABLE_TESTS OFF CACHE BOOL "" FORCE)
   FetchContent_Declare(raja
     GIT_REPOSITORY https://github.com/LLNL/RAJA.git
     GIT_TAG        v2024.07.0

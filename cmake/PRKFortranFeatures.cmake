@@ -102,6 +102,11 @@ function(prk_check_openmp_offload)
     # this define those directives fail to parse at all, a genuine
     # separate requirement from just getting -fopenmp/-foffload accepted.
     set(_candidate "-fopenmp;-foffload=-O3;-DGPU_SCHEDULE=")
+  elseif(CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
+    # Matches make.defs.oneapi's OFFLOADFLAG=-fopenmp-targets=spir64
+    # (SPIR-V codegen for Intel GPUs/CPU-as-device fallback) plus the same
+    # GPU_SCHEDULE macro requirement as the GNU branch above.
+    set(_candidate "-fopenmp;-fopenmp-targets=spir64;-DGPU_SCHEDULE=")
   else()
     set(_candidate "")
   endif()
@@ -110,7 +115,16 @@ function(prk_check_openmp_offload)
     message(STATUS "Fortran OpenMP target offload: not probed (no OpenMP, or no known flag for ${CMAKE_Fortran_COMPILER_ID})")
     return()
   endif()
-  set(CMAKE_REQUIRED_FLAGS "${_candidate}")
+  # CMAKE_REQUIRED_FLAGS wants a plain space-separated flag string, not a
+  # ;-separated CMake list (unlike CMAKE_REQUIRED_LIBRARIES/_INCLUDES) --
+  # passing the list form here silently dropped every flag after the
+  # first one (confirmed via CMakeConfigureLog.yaml: only "-fopenmp" made
+  # it into the actual probe compile command, not -fopenmp-targets=spir64
+  # or -DGPU_SCHEDULE=), which is a separate bug from the
+  # target_compile_options() list-vs-string issue documented above (that
+  # one genuinely does need a list).
+  string(REPLACE ";" " " _candidate_flags_str "${_candidate}")
+  set(CMAKE_REQUIRED_FLAGS "${_candidate_flags_str}")
   check_fortran_source_runs("${_src}" PRK_OPENMP_OFFLOAD_RUNS SRC_EXT F90)
   unset(CMAKE_REQUIRED_FLAGS)
   if(PRK_OPENMP_OFFLOAD_RUNS)

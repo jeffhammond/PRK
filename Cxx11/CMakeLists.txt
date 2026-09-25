@@ -365,17 +365,27 @@ if(BLAS_FOUND)
   # mkl_domatcopy, not cblas_domatcopy). Detect MKL from the resolved BLAS
   # library path and opt into that source path instead of assuming OpenBLAS.
   set(_cblas_defs "")
+  set(_cblas_includes "")
   if(BLAS_LIBRARIES MATCHES "mkl")
     list(APPEND _cblas_defs MKL)
+    # find_package(BLAS) only resolves libraries, not headers -- mkl.h/
+    # mkl_cblas.h aren't on the compiler's default include path even with
+    # MKLROOT set (that's enough for the -qmkl driver flag, which these
+    # targets don't use; they link BLAS_LIBRARIES directly), so this needs
+    # to be found and added explicitly.
+    find_path(PRK_MKL_INCLUDE_DIR mkl.h HINTS ENV MKLROOT PATH_SUFFIXES include)
+    if(PRK_MKL_INCLUDE_DIR)
+      set(_cblas_includes ${PRK_MKL_INCLUDE_DIR})
+    endif()
   endif()
-  prk_cxx_executable(transpose-cblas SOURCES transpose-cblas.cc LIBS BLAS::BLAS DEFS ${_cblas_defs})
-  prk_cxx_executable(dgemm-cblas     SOURCES dgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
-  prk_cxx_executable(sgemm-cblas     SOURCES sgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
-  prk_cxx_executable(xgemm-cblas     SOURCES xgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs})
+  prk_cxx_executable(transpose-cblas SOURCES transpose-cblas.cc LIBS BLAS::BLAS DEFS ${_cblas_defs} INCLUDES ${_cblas_includes})
+  prk_cxx_executable(dgemm-cblas     SOURCES dgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs} INCLUDES ${_cblas_includes})
+  prk_cxx_executable(sgemm-cblas     SOURCES sgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs} INCLUDES ${_cblas_includes})
+  prk_cxx_executable(xgemm-cblas     SOURCES xgemm-cblas.cc     LIBS BLAS::BLAS DEFS ${_cblas_defs} INCLUDES ${_cblas_includes})
   add_custom_target(cxx11_cblas DEPENDS transpose-cblas dgemm-cblas sgemm-cblas xgemm-cblas)
 
   if(MPI_CXX_FOUND)
-    prk_cxx_executable(dgemm-mpi-cblas SOURCES dgemm-mpi-cblas.cc LIBS MPI::MPI_CXX BLAS::BLAS DEFS ${_cblas_defs})
+    prk_cxx_executable(dgemm-mpi-cblas SOURCES dgemm-mpi-cblas.cc LIBS MPI::MPI_CXX BLAS::BLAS DEFS ${_cblas_defs} INCLUDES ${_cblas_includes})
     if(TARGET cxx11_mpi)
       add_dependencies(cxx11_mpi dgemm-mpi-cblas)
     endif()
@@ -550,11 +560,20 @@ if(TBB_FOUND)
     # prk_pstl.h's `namespace exec = ...` only auto-defines for GCC
     # (__GNUC__ >= 9); Clang-family compilers like icpx (__GNUC__ 4, for
     # compatibility) need to be told explicitly which PSTL backend to use.
+    set(_pstl_includes ${PRK_RANGES_BASIC_INCLUDES})
     if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
       list(APPEND _pstl_defs USE_ONEAPI_DPL)
+      # oneDPL is a separate oneAPI component; its headers aren't on icpx's
+      # default include path (only found here when setvars.sh has been
+      # sourced, which sets CPATH -- this toolchain file doesn't replicate
+      # that), so it needs to be located and added explicitly.
+      find_path(PRK_ONEDPL_INCLUDE_DIR oneapi/dpl/execution PATHS /opt/intel/oneapi/dpl/*/include)
+      if(PRK_ONEDPL_INCLUDE_DIR)
+        list(APPEND _pstl_includes ${PRK_ONEDPL_INCLUDE_DIR})
+      endif()
     endif()
-    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${_pstl_defs})
-    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb INCLUDES ${PRK_RANGES_BASIC_INCLUDES} DEFS ${_pstl_defs})
+    prk_cxx_executable(stencil-pstl   SOURCES stencil-pstl.cc   LIBS TBB::tbb INCLUDES ${_pstl_includes} DEFS ${_pstl_defs})
+    prk_cxx_executable(transpose-pstl SOURCES transpose-pstl.cc LIBS TBB::tbb INCLUDES ${_pstl_includes} DEFS ${_pstl_defs})
     if(PRK_RANGES_BASIC_CXX_STANDARD)
       set_target_properties(stencil-pstl transpose-pstl PROPERTIES CXX_STANDARD ${PRK_RANGES_BASIC_CXX_STANDARD})
     endif()
@@ -563,7 +582,7 @@ if(TBB_FOUND)
     # std::ranges directly (nothing to do with prk_ranges.h/range-v3),
     # same as nstream-stl.cc/nstream-ranges.cc -- needs C++20.
     if(PRK_CXX20_SUPPORTED)
-      prk_cxx_executable(nstream-pstl SOURCES nstream-pstl.cc LIBS TBB::tbb DEFS ${_pstl_defs})
+      prk_cxx_executable(nstream-pstl SOURCES nstream-pstl.cc LIBS TBB::tbb INCLUDES ${_pstl_includes} DEFS ${_pstl_defs})
       set_target_properties(nstream-pstl PROPERTIES CXX_STANDARD 20)
       add_dependencies(cxx11_pstl nstream-pstl)
     else()
