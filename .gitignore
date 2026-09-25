@@ -61,6 +61,13 @@ func.c                          # PRK C89 stencil generated code
 *.log2
 *.log3
 
+ADA/*.ali
+ADA/args
+ADA/hello
+ADA/nstream
+ADA/nstream_array
+ADA/transpose
+
 C1z/nstream
 C1z/nstream-alloc-target
 C1z/nstream-memcpy-target
