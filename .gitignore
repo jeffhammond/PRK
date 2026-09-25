@@ -1,24 +1,41 @@
-*.i                             # Preprocessed source
-*.s                             # Assembly output
-*.ll                            # LLVM intermediate
-*.o                             # Object files
+# Note: git does not support inline trailing "# comment" text after a
+# pattern on the same line -- it becomes part of the literal pattern,
+# silently breaking the match. Keep comments on their own line.
+# Preprocessed source
+*.i
+# Assembly output
+*.s
+# LLVM intermediate
+*.ll
+# Object files
+*.o
 */*.o
 */*/*.o
-core.*                          # core files
-octave-workspace                # Octave crashes
-*.swp                           # Vim
-.vscode                         # VSCode
+# core files
+core.*
+# Python bytecode cache
+__pycache__/
+# Octave crashes
+octave-workspace
+# Vim
+*.swp
 */*.swp
 */*/*.swp
 */*/*/*.swp
-*.swo                           # Vim
-*.dSYM                          # Mac
-*/*.dSYM                        # Mac
-*/*/*.dSYM                      # Mac
-*.optrpt                        # Intel compiler
-*__genmod.*                     # Intel Fortran compiler
-*.patch                         # patch files
-*.dbg                           # Flang
+*.swo
+.vscode
+# Mac
+*.dSYM
+*/*.dSYM
+*/*/*.dSYM
+# Intel compiler
+*.optrpt
+# Intel Fortran compiler
+*__genmod.*
+# patch files
+*.patch
+# Flang
+*.dbg
 
 # NVIDIA profiler
 *.nsys-rep
@@ -46,16 +63,18 @@ scripts/small/runfenix
 
 deps/
 
-*.incl                          # PRK C89 stencil generated code
+# PRK C89 stencil generated code
+*.incl
 */*.incl
 */*/*.incl
-func.c                          # PRK C89 stencil generated code
+func.c
 */func.c
 */*/func.c
 
-*.cobaltlog                     # ALCF Cobalt scheduler
-*.output                        # ALCF Cobalt scheduler
-*.error                         # ALCF Cobalt scheduler
+# ALCF Cobalt scheduler
+*.cobaltlog
+*.output
+*.error
 
 *.log
 *.log2
