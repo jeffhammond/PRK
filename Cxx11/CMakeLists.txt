@@ -86,6 +86,12 @@ find_library(PRK_NVSHMEM_DEVICE_LIBRARY nvshmem_device
 if(PRK_NVSHMEM_INCLUDE_DIR AND PRK_NVSHMEM_HOST_LIBRARY AND PRK_NVSHMEM_DEVICE_LIBRARY)
   set(PRK_NVSHMEM_FOUND TRUE)
 endif()
+# The NVSHMEM executables call nvshmem_init() directly (no MPI bootstrap),
+# so they need NVSHMEM's own PMI-based launcher, not mpirun.
+find_program(PRK_NVSHRUN_EXECUTABLE nvshmrun
+  HINTS ENV NVSHMEM_DIR
+  PATH_SUFFIXES bin
+  PATHS /usr/bin/nvshmem_13 "${CMAKE_CURRENT_LIST_DIR}/../deps/libnvshmem-linux-x86_64-3.3.24_cuda12-archive/bin")
 
 # CUDASTF is part of NVIDIA's CCCL (cudax + libcu++); this machine has a
 # local checkout in deps/stf/cccl, no CMake config used (matches the
@@ -432,8 +438,11 @@ endif()
 # ExternalProject_Add's other targets), so this is detect-only.
 find_path(PRK_NCCL_INCLUDE_DIR nccl.h HINTS ENV NCCLDIR PATH_SUFFIXES include)
 find_library(PRK_NCCL_LIBRARY nccl HINTS ENV NCCLDIR PATH_SUFFIXES lib)
-if(PRK_WITH_CUDA AND PRK_NCCL_INCLUDE_DIR AND PRK_NCCL_LIBRARY AND MPI_CXX_FOUND)
-  prk_cxx_executable(nstream-nccl SOURCES nstream-nccl.cu LIBS ${PRK_NCCL_LIBRARY} MPI::MPI_CXX INCLUDES ${PRK_NCCL_INCLUDE_DIR})
+if(PRK_WITH_CUDA AND PRK_NCCL_INCLUDE_DIR AND PRK_NCCL_LIBRARY)
+  # nstream-nccl.cu drives NCCL directly within a single process (one rank
+  # manages all local GPUs via ncclCommInitAll), no MPI involved -- MPI was
+  # an unused link dependency here, not something this target needs.
+  prk_cxx_executable(nstream-nccl SOURCES nstream-nccl.cu LIBS ${PRK_NCCL_LIBRARY} INCLUDES ${PRK_NCCL_INCLUDE_DIR})
   add_custom_target(cxx11_nccl DEPENDS nstream-nccl)
 else()
   message(STATUS "Cxx11 nccl: skipped, NCCL not found (deps/nccl here is unbuilt source, not installed)")
@@ -698,6 +707,33 @@ if(MPI_CXX_FOUND)
   prk_cxx_test(cxx11_mpi_transpose_a2a   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:transpose-a2a-mpi> 10 1024 32)
   prk_cxx_test(cxx11_mpi_transpose_p2p   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:transpose-p2p-mpi> 10 1024 32)
   prk_cxx_test(cxx11_mpi_transpose_get   COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:transpose-get-mpi> 10 1024 32)
+
+  if(TARGET dgemm-mpi-cblas)
+    prk_cxx_test(cxx11_mpi_cblas_dgemm COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 $<TARGET_FILE:dgemm-mpi-cblas> 10 400)
+    # Same pre-existing OpenBLAS CPU-kernel-detection bug as cxx11_cblas_dgemm.
+    set_tests_properties(cxx11_mpi_cblas_dgemm PROPERTIES ENVIRONMENT "OPENBLAS_CORETYPE=Haswell")
+  endif()
+
+  if(TARGET dgemm-mpi-cublas)
+    # dgemm-mpi-cublas.cu requires exactly one MPI rank per GPU (checks
+    # ngpu == np and refuses otherwise), not just <= ngpu.
+    find_program(PRK_NVIDIA_SMI_MPI nvidia-smi)
+    set(_prk_ngpu 1)
+    if(PRK_NVIDIA_SMI_MPI)
+      execute_process(
+        COMMAND "${PRK_NVIDIA_SMI_MPI}" --query-gpu=count --format=csv,noheader,nounits
+        OUTPUT_VARIABLE _prk_ngpu_out
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _prk_ngpu_result)
+      if(_prk_ngpu_result EQUAL 0)
+        string(REGEX MATCH "^[0-9]+" _prk_ngpu_first_line "${_prk_ngpu_out}")
+        if(_prk_ngpu_first_line)
+          set(_prk_ngpu "${_prk_ngpu_first_line}")
+        endif()
+      endif()
+    endif()
+    prk_cxx_test(cxx11_mpi_cublas_dgemm COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_prk_ngpu} $<TARGET_FILE:dgemm-mpi-cublas> 10 400)
+  endif()
 endif()
 
 if(BLAS_FOUND)
@@ -733,6 +769,27 @@ if(PRK_WITH_CUDA)
     prk_cxx_test(cxx11_cudastf_dgemm     COMMAND dgemm-cudastf 10 400)
     prk_cxx_test(cxx11_cudastf_stencil   COMMAND stencil-cudastf 10 1000)
     prk_cxx_test(cxx11_cudastf_transpose COMMAND transpose-cudastf 10 1024)
+  endif()
+
+  if(TARGET nstream-nccl)
+    prk_cxx_test(cxx11_nccl_nstream COMMAND nstream-nccl 10 16777216)
+  endif()
+
+  if(PRK_NVSHMEM_FOUND AND PRK_NVSHRUN_EXECUTABLE)
+    prk_cxx_test(cxx11_nvshmem_transpose_get COMMAND ${PRK_NVSHRUN_EXECUTABLE} -n 2 $<TARGET_FILE:transpose-get-nvshmem> 10 1024)
+    prk_cxx_test(cxx11_nvshmem_transpose_a2a COMMAND ${PRK_NVSHRUN_EXECUTABLE} -n 2 $<TARGET_FILE:transpose-a2a-nvshmem> 10 1024)
+    prk_cxx_test(cxx11_nvshmem_transpose_ptr COMMAND ${PRK_NVSHRUN_EXECUTABLE} -n 2 $<TARGET_FILE:transpose-ptr-nvshmem> 10 1024)
+    # transpose-put-nvshmem.cu's device-initiated kernel (transpose_nvshmem_put
+    # in transpose-kernel.h) only synchronizes phases with __syncthreads(),
+    # which is intra-block only and does nothing to order NVSHMEM PUTs across
+    # PEs/GPUs -- a real, pre-existing cross-PE race (confirmed: consistently
+    # throws "validation failed" under nvshmrun -n 2, independent of the
+    # get/a2a/ptr variants above, which all validate correctly). Needs a
+    # device-side NVSHMEM collective barrier between phases to fix properly;
+    # not wired into CTest until that's done, rather than shipping a test
+    # that's expected to fail/abort.
+  else()
+    message(STATUS "Cxx11 nvshmem tests: skipped, nvshmrun launcher not found")
   endif()
 endif()
 
