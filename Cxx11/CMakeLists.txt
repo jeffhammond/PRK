@@ -54,9 +54,9 @@ find_package(OpenCL)
 find_package(TBB QUIET PATHS /opt/intel/oneapi/tbb/*/lib/cmake/tbb)
 
 find_path(PRK_BOOST_COMPUTE_INCLUDE_DIR boost/compute.hpp)
-if(PRK_BOOST_COMPUTE_INCLUDE_DIR AND OpenCL_FOUND)
-  set(PRK_BOOST_COMPUTE_FOUND TRUE)
-endif()
+# Whether this is actually usable also depends on OpenCL_FOUND, which the
+# CUDA-based fallback below can still flip from FALSE to TRUE -- the real
+# check happens after that runs (see "Boost.Compute needs OpenCL" below).
 
 # NVSHMEM is available two ways here: a system package built against CUDA
 # 13 (headers under /usr/include/nvshmem_13, libs resolved by the default
@@ -199,6 +199,34 @@ if(CMAKE_CUDA_COMPILER)
   endif()
 else()
   set(PRK_WITH_CUDA FALSE)
+endif()
+
+if(PRK_WITH_CUDA AND NOT OpenCL_FOUND)
+  # find_package(OpenCL) above only failed on OpenCL_INCLUDE_DIR (missing
+  # CL/cl.h) even though the NVIDIA driver's OpenCL ICD is installed and
+  # working here (libOpenCL.so + /etc/OpenCL/vendors/nvidia.icd) -- a
+  # machine with a working CUDA GPU has OpenCL for that GPU too, the
+  # headers just aren't packaged system-wide. CUDA toolkits sometimes
+  # bundle CL/cl.h (this machine's active 13.0 doesn't, but a co-installed
+  # 12.8 does) -- search the active toolkit first, then any other
+  # co-installed CUDA toolkit, before giving up.
+  file(GLOB PRK_OPENCL_CUDA_CANDIDATES /usr/local/cuda-*/targets/*/include)
+  find_path(PRK_OPENCL_CUDA_INCLUDE_DIR CL/cl.h
+    HINTS ${CUDAToolkit_INCLUDE_DIRS}
+    PATHS ${PRK_OPENCL_CUDA_CANDIDATES})
+  if(PRK_OPENCL_CUDA_INCLUDE_DIR)
+    set(OpenCL_INCLUDE_DIR "${PRK_OPENCL_CUDA_INCLUDE_DIR}" CACHE PATH "OpenCL include directory" FORCE)
+    find_package(OpenCL)
+    if(OpenCL_FOUND)
+      message(STATUS "OpenCL: found via CUDA toolkit headers at ${PRK_OPENCL_CUDA_INCLUDE_DIR} (NVIDIA ICD)")
+    endif()
+  endif()
+endif()
+
+# Boost.Compute needs OpenCL: re-check now that the CUDA-header fallback
+# above has had a chance to flip OpenCL_FOUND from FALSE to TRUE.
+if(PRK_BOOST_COMPUTE_INCLUDE_DIR AND OpenCL_FOUND)
+  set(PRK_BOOST_COMPUTE_FOUND TRUE)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/AutobuildDeps.cmake")
@@ -819,6 +847,28 @@ if(OpenCL_FOUND)
   prk_cxx_test(cxx11_opencl_transpose      COMMAND transpose-opencl 10 1024)
   prk_cxx_test(cxx11_opencl_nstream        COMMAND nstream-opencl 10 16777216)
   prk_cxx_test(cxx11_opencl_p2p_innerloop  COMMAND p2p-innerloop-opencl 10 1024)
+  # p2p-innerloop-opencl.cc is a known, pre-existing bug: p2p.cl's kernel
+  # loops over all 2n-2 anti-diagonals internally and uses barrier() to
+  # synchronize between them, but OpenCL's barrier() only synchronizes
+  # work-items within the same work-group -- it does nothing across the
+  # multiple work-groups the runtime actually launches for
+  # NDRange(2*n) once 2*n exceeds one work-group (confirmed: fails at
+  # n=512 and n=1024, passes at n=8 where everything fits in one group).
+  # Exact same class of bug as transpose-put-nvshmem's __syncthreads()
+  # issue, just OpenCL's barrier() instead of CUDA's. Needs the kernel
+  # restructured to launch once per diagonal from the host (like the
+  # working CUDA/OpenACC p2p variants) to fix properly. Wired into CTest
+  # anyway (expected-fail, tracked) rather than silently skipped.
+  # These load their kernel source from .cl files at runtime via a bare
+  # relative filename (e.g. "nstream64.cl"), found only in the Cxx11
+  # source directory -- CTest's default working directory is the build
+  # directory, where loadProgram() silently fails to find them (and, on
+  # top of that, nstream-opencl.cc/etc. don't propagate that failure into
+  # main()'s exit code either, so without this the test would report a
+  # false "Passed" while never actually running an OpenCL kernel).
+  set_tests_properties(
+    cxx11_opencl_stencil cxx11_opencl_transpose cxx11_opencl_nstream cxx11_opencl_p2p_innerloop
+    PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}")
   if(TARGET nstream-boost-compute)
     prk_cxx_test(cxx11_boost_compute_nstream COMMAND nstream-boost-compute 10 16777216)
   endif()
