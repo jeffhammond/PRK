@@ -482,6 +482,20 @@ SERIAL/Sparse/sparse
 SERIAL/Stencil/stencil
 SERIAL/Synch_p2p/p2p
 SERIAL/Transpose/transpose
+# Top-level equivalents: CMake's in-source build (SERIAL/CMakeLists.txt)
+# places binaries directly in SERIAL/, not the per-kernel subdirectories
+# above.
+SERIAL/amr
+SERIAL/branch
+SERIAL/dgemm
+SERIAL/nstream
+SERIAL/p2p
+SERIAL/pic
+SERIAL/random
+SERIAL/reduce
+SERIAL/sparse
+SERIAL/stencil
+SERIAL/transpose
 dgemm-vector.dSYM
 dgemm.dSYM
 nstream-opencl.dSYM

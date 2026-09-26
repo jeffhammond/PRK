@@ -17,6 +17,7 @@ enable_testing()
 option(PRK_ENABLE_FORTRAN "Build FORTRAN/ kernels" ON)
 option(PRK_ENABLE_C1Z "Build C1z/ kernels" ON)
 option(PRK_ENABLE_CXX11 "Build Cxx11/ kernels" ON)
+option(PRK_ENABLE_SERIAL "Build SERIAL/ kernels" ON)
 
 if(PRK_ENABLE_FORTRAN)
   add_subdirectory(FORTRAN)
@@ -28,6 +29,10 @@ endif()
 
 if(PRK_ENABLE_CXX11)
   add_subdirectory(Cxx11)
+endif()
+
+if(PRK_ENABLE_SERIAL)
+  add_subdirectory(SERIAL)
 endif()
 
 # Future languages follow the same pattern: add an option
