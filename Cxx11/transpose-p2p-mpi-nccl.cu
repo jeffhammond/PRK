@@ -61,9 +61,7 @@
 
 //#define DEBUG 1
 
-const std::array<std::string,7> vnames = {"naive", "coalesced", "no bank conflicts",
-                                          "bulk naive", "bulk coalesced", "bulk no bank conflicts",
-                                          "debug"};
+const std::array<std::string,3> vnames = {"naive", "coalesced", "no bank conflicts"};
 
 int main(int argc, char * argv[])
 {
@@ -109,20 +107,17 @@ int main(int argc, char * argv[])
         if (argc > 3) {
             variant = std::atoi(argv[3]);
         }
-        if (variant < 0 || variant > 6) {
-            throw "Please select a valid variant (0: naive 1: coalesced, 2: no bank conflicts, 3-5: bulk..., 6: debug)";
+        if (variant < 0 || variant > 2) {
+            throw "Please select a valid variant (0: naive 1: coalesced, 2: no bank conflicts)";
         }
 
         block_order = order / np;
 
-        // debug variant doesn't care
-        if (variant != 6) {
-          if (order % tile_dim) {
-            throw "ERROR: matrix dimension not divisible by 32";
-          }
-          if (block_order % tile_dim) {
-            throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
-          }
+        if (order % tile_dim) {
+          throw "ERROR: matrix dimension not divisible by 32";
+        }
+        if (block_order % tile_dim) {
+          throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
         }
       }
       catch (const char * e) {
@@ -145,10 +140,6 @@ int main(int argc, char * argv[])
 
     // for B += T.T
     int dimz = 1;
-    // parallelize over z in bulk version
-    if (3 <= variant && variant <= 5) {
-        dimz = np;
-    }
     dim3 dimGrid(block_order/tile_dim, block_order/tile_dim, dimz);
     dim3 dimBlock(tile_dim, block_rows, 1);
     info.checkDims(dimBlock, dimGrid);
@@ -180,6 +171,9 @@ int main(int argc, char * argv[])
     //////////////////////////////////////////////////////////////////////
 
     double trans_time{0};
+    double increment_time{0};
+    double transpose_kernel_time{0};
+    double total_time{0};
 
     const size_t nelems = order * block_order;
 
@@ -195,12 +189,23 @@ int main(int argc, char * argv[])
     }
 
     //A[order][block_order]
-    double * A = prk::CUDA::malloc_device<double>(nelems);
-    double * B = prk::CUDA::malloc_device<double>(nelems);
-    double * T = prk::CUDA::malloc_device<double>(block_order * block_order);
+    double * A = prk::NCCL::allocate<double>(nelems);
+    double * T = prk::NCCL::allocate<double>(block_order * block_order);
+    double * B = prk::CUDA::malloc_device<double>(nelems); // not used in comms
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
+
+    // Create CUDA events for profiling kernels
+    cudaEvent_t increment_stop;
+    cudaEvent_t transpose_start, transpose_stop;
+    cudaEvent_t total_start, total_stop;
+    prk::check( cudaEventCreate(&increment_stop) );
+    prk::check( cudaEventCreate(&transpose_start) );
+    prk::check( cudaEventCreate(&transpose_stop) );
+    prk::check( cudaEventCreate(&total_start) );
+    prk::check( cudaEventCreate(&total_stop) );
+
     prk::MPI::barrier();
 
     {
@@ -212,7 +217,9 @@ int main(int argc, char * argv[])
             trans_time = prk::wtime();
         }
 
+        prk::check( cudaEventRecord(total_start) );
         // transpose the  matrix  
+        prk::check( cudaEventRecord(transpose_start) );
         for (int r=0; r<np; r++) {
             const int recv_from = (me + r) % np;
             const int send_to   = (me - r + np) % np;
@@ -227,13 +234,32 @@ int main(int argc, char * argv[])
                 transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
             }
         }
+        prk::check( cudaEventRecord(transpose_stop) );
 
         // increment A
         cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
+        prk::check( cudaEventRecord(increment_stop) );
+        prk::check( cudaEventRecord(total_stop) );
       }
       prk::CUDA::sync();
       prk::MPI::barrier();
       trans_time = prk::wtime() - trans_time;
+
+      // Calculate kernel times
+      prk::check( cudaEventSynchronize(transpose_stop) );
+      float transpose_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&transpose_milliseconds, transpose_start, transpose_stop) );
+      transpose_kernel_time = transpose_milliseconds / 1000.0; // Convert to seconds
+
+      prk::check( cudaEventSynchronize(increment_stop) );
+      float increment_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&increment_milliseconds, transpose_stop, increment_stop) );
+      increment_time = increment_milliseconds / 1000.0; // Convert to seconds
+
+      prk::check( cudaEventSynchronize(total_stop) );
+      float total_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&total_milliseconds, total_start, total_stop) );
+      total_time = total_milliseconds / 1000.0; // Convert to seconds
     }
 
     prk::CUDA::copyD2H(h_B, B, nelems);
@@ -245,9 +271,16 @@ int main(int argc, char * argv[])
 
     prk::check( ncclCommDestroy(nccl_comm_world) );
 
-    prk::CUDA::free(A);
+    // Clean up CUDA events
+    prk::check( cudaEventDestroy(increment_stop) );
+    prk::check( cudaEventDestroy(transpose_start) );
+    prk::check( cudaEventDestroy(transpose_stop) );
+    prk::check( cudaEventDestroy(total_start) );
+    prk::check( cudaEventDestroy(total_stop) );
+
+    prk::NCCL::free(A);
+    prk::NCCL::free(T);
     prk::CUDA::free(B);
-    prk::CUDA::free(T);
 
     prk::CUDA::free_host(h_A);
 
@@ -277,8 +310,11 @@ int main(int argc, char * argv[])
         std::cout << "Solution validates" << std::endl;
         auto avgtime = trans_time/iterations;
         auto bytes = (size_t)order * (size_t)order * sizeof(double);
-        std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+        std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
                   << " Avg time (s): " << avgtime << std::endl;
+        std::cout << "Transpose+sendrecv kernel total time (s): " << transpose_kernel_time << std::endl;
+        std::cout << "Increment kernel total time (s): " << increment_time << std::endl;
+        std::cout << "Total kernel total time (s): " << total_time << std::endl;
       } else {
         std::cout << "ERROR: Aggregate squared error " << abserr
                   << " exceeds threshold " << epsilon << std::endl;
