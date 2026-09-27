@@ -123,7 +123,7 @@ const std::array<std::string,3> vnames = {"naive", "coalesced", "no bank conflic
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/HIP Matrix transpose: B = A^T" << std::endl;
 
   prk::HIP::info info;
@@ -251,7 +251,7 @@ int main(int argc, char * argv[])
     std::cout << "Solution validates" << std::endl;
     auto avgtime = trans_time/iterations;
     auto bytes = (size_t)order * (size_t)order * sizeof(double);
-    std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+    std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
               << " Avg time (s): " << avgtime << std::endl;
   } else {
 #ifdef VERBOSE

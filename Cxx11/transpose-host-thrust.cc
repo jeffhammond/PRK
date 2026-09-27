@@ -51,10 +51,11 @@
 
 #include "prk_util.h"
 #include "prk_thrust.h"
+#include "prk_ranges.h"
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/Thrust Matrix transpose: B = A^T" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
@@ -143,7 +144,7 @@ int main(int argc, char * argv[])
     std::cout << "Solution validates" << std::endl;
     auto avgtime = trans_time/iterations;
     auto bytes = (size_t)order * (size_t)order * sizeof(double);
-    std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+    std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
               << " Avg time (s): " << avgtime << std::endl;
   } else {
     std::cout << "ERROR: Aggregate squared error " << abserr
