@@ -77,6 +77,7 @@ int main(int argc, char * argv[])
 
     int iterations = -1, variant = -1;
     size_t order = 0, block_order = 0;
+    bool on_device = true;
 
     if (me == 0) {
       std::cout << "Parallel Research Kernels" << std::endl;
@@ -115,6 +116,10 @@ int main(int argc, char * argv[])
         if (block_order % tile_dim) {
           throw "ERROR: Block Order must be an integer multiple of the tile dimension (32)";
         }
+
+        if (argc > 4) {
+            on_device = (0 != std::atoi(argv[4]));
+        }
       }
       catch (const char * e) {
         std::cout << e << std::endl;
@@ -128,6 +133,7 @@ int main(int argc, char * argv[])
       std::cout << "Number of iterations = " << iterations << std::endl;
       std::cout << "Matrix order         = " << order << std::endl;
       std::cout << "Variant              = " << vnames[variant] << std::endl;
+      std::cout << "Device-initiated     = " << (on_device ? "true" : "false") << std::endl;
     }
 
     // for B += T.T
@@ -147,6 +153,9 @@ int main(int argc, char * argv[])
     //////////////////////////////////////////////////////////////////////
 
     double trans_time{0};
+    double increment_time{0};
+    double transpose_kernel_time{0};
+    double total_time{0};
 
     const size_t nelems = order * block_order;
 
@@ -163,13 +172,23 @@ int main(int argc, char * argv[])
 
     //A[order][block_order]
     double * A = prk::NVSHMEM::allocate<double>(nelems);
-    // this only works for NVL.  if running over UCX/IB, need to use prk::NVSHMEM::allocate (or register_buffer)
-    //double * T = prk::CUDA::malloc_device<double>(block_order * block_order);
     double * T = prk::NVSHMEM::allocate<double>(block_order * block_order);
     double * B = prk::CUDA::malloc_device<double>(nelems);
 
     prk::CUDA::copyH2D(A, h_A, nelems);
     prk::CUDA::copyH2D(B, h_B, nelems);
+
+    // Create CUDA events for profiling kernels
+    cudaEvent_t increment_start, increment_stop;
+    cudaEvent_t transpose_start, transpose_stop;
+    cudaEvent_t total_start, total_stop;
+    prk::check( cudaEventCreate(&increment_start) );
+    prk::check( cudaEventCreate(&increment_stop) );
+    prk::check( cudaEventCreate(&transpose_start) );
+    prk::check( cudaEventCreate(&transpose_stop) );
+    prk::check( cudaEventCreate(&total_start) );
+    prk::check( cudaEventCreate(&total_stop) );
+
     prk::NVSHMEM::barrier(true);
 
     {
@@ -181,34 +200,72 @@ int main(int argc, char * argv[])
             trans_time = prk::wtime();
         }
 
-        // transpose the matrix
-        for (int r=0; r<np; r++) {
-            const int recv_from = (me + r) % np;
-            size_t offset = block_order * block_order * me;
-            prk::NVSHMEM::get(T, A + offset, block_order * block_order, recv_from);
-            offset = block_order * block_order * recv_from;
-            if (variant==0) {
-                transposeNaive<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
-            } else if (variant==1) {
-                transposeCoalesced<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
-            } else if (variant==2) {
-                transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
+        prk::check( cudaEventRecord(total_start) );
+        prk::check( cudaEventRecord(transpose_start) );
+        if (on_device) {
+            // we do this and barrier outside of the kernel because this kernel supports gridsize <= 792 (at least on H100)
+            // and that is too small for the transpose algorithm we are doing, which requires e.g. a 32x32x1 grid for a
+            // 4096x4096 matrix
+            transpose_nvshmem_get<<<dimGrid, dimBlock>>>(variant, block_order*block_order, me, np,
+                                                         block_order, A, B, T);
+        } else {
+            // transpose the matrix
+            for (int r=0; r<np; r++) {
+                const int recv_from = (me + r) % np;
+                size_t offset = block_order * block_order * me;
+                prk::NVSHMEM::get(T, A + offset, block_order * block_order, recv_from);
+                offset = block_order * block_order * recv_from;
+                if (variant==0) {
+                    transposeNaive<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
+                } else if (variant==1) {
+                    transposeCoalesced<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
+                } else if (variant==2) {
+                    transposeNoBankConflict<<<dimGrid, dimBlock>>>(block_order, T, B + offset);
+                }
             }
         }
+        prk::check( cudaEventRecord(transpose_stop) );
         prk::NVSHMEM::barrier(false);
         //prk::CUDA::sync();
 
         // increment A
+        prk::check( cudaEventRecord(increment_start) );
         cuda_increment<<<blocks_per_grid, threads_per_block>>>(order * block_order, A);
+        prk::check( cudaEventRecord(increment_stop) );
         prk::NVSHMEM::barrier(false);
         //prk::CUDA::sync();
+        prk::check( cudaEventRecord(total_stop) );
       }
       //prk::NVSHMEM::barrier(false);
       prk::CUDA::sync();
       trans_time = prk::wtime() - trans_time;
+
+      // Calculate kernel times
+      prk::check( cudaEventSynchronize(transpose_stop) );
+      float transpose_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&transpose_milliseconds, transpose_start, transpose_stop) );
+      transpose_kernel_time = transpose_milliseconds / 1000.0; // Convert to seconds
+
+      prk::check( cudaEventSynchronize(increment_stop) );
+      float increment_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&increment_milliseconds, increment_start, increment_stop) );
+      increment_time = increment_milliseconds / 1000.0; // Convert to seconds
+
+      prk::check( cudaEventSynchronize(total_stop) );
+      float total_milliseconds = 0;
+      prk::check( cudaEventElapsedTime(&total_milliseconds, total_start, total_stop) );
+      total_time = total_milliseconds / 1000.0; // Convert to seconds
     }
 
     prk::CUDA::copyD2H(h_B, B, nelems);
+
+    // Clean up CUDA events
+    prk::check( cudaEventDestroy(increment_start) );
+    prk::check( cudaEventDestroy(increment_stop) );
+    prk::check( cudaEventDestroy(transpose_start) );
+    prk::check( cudaEventDestroy(transpose_stop) );
+    prk::check( cudaEventDestroy(total_start) );
+    prk::check( cudaEventDestroy(total_stop) );
 
     prk::NVSHMEM::free(A);
     prk::NVSHMEM::free(T);
@@ -248,8 +305,11 @@ int main(int argc, char * argv[])
         std::cout << "Solution validates" << std::endl;
         auto avgtime = trans_time/iterations;
         auto bytes = (size_t)order * (size_t)order * sizeof(double);
-        std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+        std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
                   << " Avg time (s): " << avgtime << std::endl;
+        std::cout << "Transpose+get kernel total time (s): " << transpose_kernel_time << std::endl;
+        std::cout << "Increment kernel total time (s): " << increment_time << std::endl;
+        std::cout << "Total kernel total time (s): " << total_time << std::endl;
       } else {
         std::cout << "ERROR: Aggregate squared error " << abserr
                   << " exceeds threshold " << epsilon << std::endl;
