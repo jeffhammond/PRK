@@ -406,6 +406,11 @@ JAVA/nstream.class
 JAVA/p2p.class
 JAVA/stencil.class
 JAVA/transpose.class
+KOTLIN/p2p.jar
+KOTLIN/nstream.jar
+KOTLIN/stencil.jar
+KOTLIN/transpose.jar
+KOTLIN/hello.jar
 MPI1/AMR/amr
 MPI1/Branch/branch
 MPI1/DGEMM/dgemm
