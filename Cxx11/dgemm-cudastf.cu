@@ -149,17 +149,16 @@ int main(int argc, char * argv[])
   const auto forder = static_cast<double>(order);
   const auto reference = 0.25 * prk::pow(forder,3) * prk::pow(forder-1.0,2) * (iterations+1);
 
-  double checksum;
-  ctx.host_launch(C.read())->*[&](auto hC)
-  {
-      for (size_t j = 0; j < hC.extent(1); j++)
-      for (size_t i = 0; i < hC.extent(0); i++)
-      {
-          checksum += hC(i, j);
-      }
-  };
-
-  cudaStreamSynchronize(ctx.fence());
+  // Compute the checksum with a reduce access mode on the device rather
+  // than a sequential host_launch, matching dgemm-cublas-cudastf.cu; this
+  // also sidesteps the checksum accumulator needing to start at exactly
+  // 0 (the reducer initializes it to the reduction's identity element).
+  auto lchecksum = ctx.logical_data(shape_of<scalar_view<double>>());
+  ctx.parallel_for(C.shape(), C.read(), lchecksum.reduce(reducer::sum<double>{}))
+      ->*[] __device__(size_t i, size_t j, auto dC, double &sum) {
+          sum += dC(i, j);
+      };
+  const double checksum = ctx.wait(lchecksum);
 
   const auto epsilon = 1.0e-8;
   const auto residuum = prk::abs(checksum-reference)/reference;

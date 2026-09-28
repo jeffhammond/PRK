@@ -215,19 +215,21 @@ int main(int argc, char* argv[])
   //////////////////////////////////////////////////////////////////////
 
   // interior of grid with respect to stencil
-  double norm = 0.0;
   size_t active_points = static_cast<size_t>(n-2*radius)*static_cast<size_t>(n-2*radius);
-  ctx.host_launch(out.read())->*[&](auto h_out)
-  {
-     for (int i=radius; i<n-radius; i++) {
-       for (int j=radius; j<n-radius; j++) {
-         norm += prk::abs(h_out(i, j));
-       }
-     }
-     norm /= active_points;
-  };
-
-  cudaStreamSynchronize(ctx.fence());
+  // Compute the L1 norm with a reduce access mode on the device rather
+  // than a sequential host_launch, matching dgemm-cublas-cudastf.cu. The
+  // full grid is iterated (not just the interior) since parallel_for
+  // needs a rectangular shape; points outside the interior simply don't
+  // contribute to the reduction.
+  auto lnorm = ctx.logical_data(shape_of<scalar_view<double>>());
+  ctx.parallel_for(out.shape(), out.read(), lnorm.reduce(reducer::sum<double>{}))
+      ->*[n, radius] __device__(size_t i, size_t j, auto d_out, double &sum) {
+          if (i >= (size_t)radius && i < (size_t)(n-radius) &&
+              j >= (size_t)radius && j < (size_t)(n-radius)) {
+            sum += fabs(d_out(i, j));
+          }
+      };
+  double norm = ctx.wait(lnorm) / active_points;
 
   // verify correctness
   const double epsilon = 1.0e-8;

@@ -130,17 +130,17 @@ int main(int argc, char * argv[])
   /// Analyze and output results
   //////////////////////////////////////////////////////////////////////
 
-  double abserr(0);
-  ctx.host_launch(B.read())->*[&](auto hB) {
-      const auto addit = (iterations+1.) * (iterations/2.);
-      for (int j=0; j<order; j++) {
-        for (int i=0; i<order; i++) {
+  // Compute the aggregate error with a reduce access mode on the device
+  // rather than a sequential host_launch, matching dgemm-cublas-cudastf.cu.
+  const auto addit = (iterations+1.) * (iterations/2.);
+  auto labserr = ctx.logical_data(shape_of<scalar_view<double>>());
+  ctx.parallel_for(B.shape(), B.read(), labserr.reduce(reducer::sum<double>{}))
+      ->*[order, iterations, addit] __device__(size_t j, size_t i, auto dB, double &sum) {
           const int ij = i*order+j;
           const double reference = static_cast<double>(ij)*(1.+iterations)+addit;
-          abserr += prk::abs(hB(j, i) - reference);
-        }
-      }
-  };
+          sum += fabs(dB(j, i) - reference);
+      };
+  const double abserr = ctx.wait(labserr);
 
   ctx.finalize();
 
