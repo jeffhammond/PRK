@@ -170,7 +170,7 @@ int main(int argc, char * argv[])
 
       for (int iter = 0; iter<=iterations; iter++) {
           if (iter==1) {
-              cudaStreamSynchronize(ctx.task_fence());
+              cudaStreamSynchronize(ctx.fence());
               gemm_time = prk::wtime();
           }
 
@@ -190,10 +190,10 @@ int main(int argc, char * argv[])
           };
       }
 
-      cudaStreamSynchronize(ctx.task_fence());
+      cudaStreamSynchronize(ctx.fence());
       gemm_time = prk::wtime() - gemm_time;
 
-      auto lsum = ctx.logical_data(shape_of<scalar<double>>());
+      auto lsum = ctx.logical_data(shape_of<scalar_view<double>>());
       ctx.parallel_for(c.shape(), c.read(), lsum.reduce(reducer::sum<double>{}))
       ->*[]__device__(size_t i, size_t j, size_t k, auto dc, double &sum) {
           sum += dc(i, j, k);
@@ -226,7 +226,7 @@ int main(int argc, char * argv[])
 
       for (int iter = 0; iter<=iterations; iter++) {
           if (iter==1) {
-              cudaStreamSynchronize(ctx.task_fence());
+              cudaStreamSynchronize(ctx.fence());
               gemm_time = prk::wtime();
           }
 
@@ -249,12 +249,12 @@ int main(int argc, char * argv[])
           }
       }
 
-      cudaStreamSynchronize(ctx.task_fence());
+      cudaStreamSynchronize(ctx.fence());
       gemm_time = prk::wtime() - gemm_time;
 
       for (size_t k = 0; k < matrices; k++)
       {
-          auto lsum = ctx.logical_data(shape_of<scalar<double>>());
+          auto lsum = ctx.logical_data(shape_of<scalar_view<double>>());
           ctx.parallel_for(vector_c[k].shape(), vector_c[k].read(), lsum.reduce(reducer::sum<double>{}))
           ->*[]__device__(size_t i, size_t j, auto dck, double &sum) {
               sum += dck(i, j);

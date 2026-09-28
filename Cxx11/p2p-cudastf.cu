@@ -145,7 +145,7 @@ int main(int argc, char* argv[])
   for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) {
-        cudaStreamSynchronize(ctx.task_fence());
+        cudaStreamSynchronize(ctx.fence());
         pipeline_time = prk::wtime();
     }
 
@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 #endif
   }
 
-  cudaStreamSynchronize(ctx.task_fence());
+  cudaStreamSynchronize(ctx.fence());
   pipeline_time = prk::wtime() - pipeline_time;
 
   //////////////////////////////////////////////////////////////////////
@@ -197,7 +197,7 @@ int main(int argc, char* argv[])
       corner_res = h_grid(n - 1, n - 1);
   };
 
-  cudaStreamSynchronize(ctx.task_fence());
+  cudaStreamSynchronize(ctx.fence());
 
   if ( (prk::abs(corner_res - corner_val)/corner_val) > epsilon) {
     std::cout << "ERROR: checksum " << corner_res

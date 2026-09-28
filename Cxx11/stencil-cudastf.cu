@@ -189,7 +189,7 @@ int main(int argc, char* argv[])
   for (int iter = 0; iter<=iterations; iter++) {
 
     if (iter==1) {
-        cudaStreamSynchronize(ctx.task_fence());
+        cudaStreamSynchronize(ctx.fence());
         stencil_time = prk::wtime();
     }
 
@@ -206,7 +206,7 @@ int main(int argc, char* argv[])
     };
   }
 
-  cudaStreamSynchronize(ctx.task_fence());
+  cudaStreamSynchronize(ctx.fence());
 
   stencil_time = prk::wtime() - stencil_time;
 
@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
      norm /= active_points;
   };
 
-  cudaStreamSynchronize(ctx.task_fence());
+  cudaStreamSynchronize(ctx.fence());
 
   // verify correctness
   const double epsilon = 1.0e-8;

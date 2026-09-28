@@ -124,7 +124,7 @@ int main(int argc, char * argv[])
   {
     for (int iter = 0; iter<=iterations; iter++) {
       if (iter==1) {
-          cudaStreamSynchronize(ctx.task_fence());
+          cudaStreamSynchronize(ctx.fence());
           dgemm_time = prk::wtime();
       }
 
@@ -138,7 +138,7 @@ int main(int argc, char * argv[])
       };
     }
 
-    cudaStreamSynchronize(ctx.task_fence());
+    cudaStreamSynchronize(ctx.fence());
     dgemm_time = prk::wtime() - dgemm_time;
   }
 
@@ -159,7 +159,7 @@ int main(int argc, char * argv[])
       }
   };
 
-  cudaStreamSynchronize(ctx.task_fence());
+  cudaStreamSynchronize(ctx.fence());
 
   const auto epsilon = 1.0e-8;
   const auto residuum = prk::abs(checksum-reference)/reference;

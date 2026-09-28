@@ -481,13 +481,21 @@ if(PRK_WITH_CUDA)
 
   if(PRK_CUDASTF_FOUND AND PRK_CUDASTF_WORKS)
     set(_cudastf_includes ${PRK_CUDASTF_CUDAX_INCLUDE_DIR} ${PRK_CUDASTF_LIBCUDACXX_INCLUDE_DIR})
-    prk_cxx_executable(dgemm-cudastf    SOURCES dgemm-cudastf.cu    LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes} FLAGS --expt-relaxed-constexpr)
-    prk_cxx_executable(stencil-cudastf  SOURCES stencil-cudastf.cu  LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes} FLAGS --expt-relaxed-constexpr)
-    prk_cxx_executable(p2p-cudastf      SOURCES p2p-cudastf.cu      LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes} FLAGS --expt-relaxed-constexpr)
-    prk_cxx_executable(transpose-cudastf SOURCES transpose-cudastf.cu LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes} FLAGS --expt-relaxed-constexpr)
+    # No FLAGS --expt-relaxed-constexpr here: that's already applied to every
+    # CUDA compilation project-wide via the COMPILE_LANGUAGE:CUDA-scoped
+    # add_compile_options() above. Passing it again through prk_cxx_executable's
+    # FLAGS would also add it to target_link_options() -- harmless for targets
+    # that link via nvcc, but these five link via the host C++ compiler (g++)
+    # for their final executable-link step (CMake's CUDA device-link model),
+    # and g++ doesn't understand nvcc-only flags: "unrecognized command-line
+    # option '--expt-relaxed-constexpr'".
+    prk_cxx_executable(dgemm-cudastf    SOURCES dgemm-cudastf.cu    LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes})
+    prk_cxx_executable(stencil-cudastf  SOURCES stencil-cudastf.cu  LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes})
+    prk_cxx_executable(p2p-cudastf      SOURCES p2p-cudastf.cu      LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes})
+    prk_cxx_executable(transpose-cudastf SOURCES transpose-cudastf.cu LIBS CUDA::cuda_driver INCLUDES ${_cudastf_includes})
     prk_cxx_executable(dgemm-cublas-cudastf SOURCES dgemm-cublas-cudastf.cu
       LIBS CUDA::cuda_driver CUDA::cublas CUDA::cublasLt INCLUDES ${_cudastf_includes}
-      FLAGS --expt-relaxed-constexpr DEFS PRK_USE_CUBLAS)
+      DEFS PRK_USE_CUBLAS)
     add_custom_target(cxx11_cudastf DEPENDS
       cxx11_dgemm-cudastf cxx11_stencil-cudastf cxx11_p2p-cudastf cxx11_transpose-cudastf cxx11_dgemm-cublas-cudastf)
   else()
