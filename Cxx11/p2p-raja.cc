@@ -64,7 +64,7 @@
 
 int main(int argc, char* argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/RAJA pipeline execution on 2D grid" << std::endl;
 
   //////////////////////////////////////////////////////////////////////
@@ -74,6 +74,7 @@ int main(int argc, char* argv[])
   int iterations;
   int n;
   int nc;
+  int nb;
   try {
       if (argc < 3) {
         throw " <# iterations> <array dimension> [<chunk dimension>]";

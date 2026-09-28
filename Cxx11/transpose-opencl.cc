@@ -56,7 +56,7 @@
 #include "prk_opencl.h"
 
 template <typename T>
-void run(cl::Context context, int iterations, int order)
+bool run(cl::Context context, int iterations, int order)
 {
   auto precision = (sizeof(T)==8) ? 64 : 32;
   auto kfile = "transpose"+std::to_string(precision)+".cl";
@@ -130,17 +130,19 @@ void run(cl::Context context, int iterations, int order)
     std::cout << "Solution validates" << std::endl;
     auto avgtime = trans_time/iterations;
     auto bytes = (size_t)order * (size_t)order * sizeof(double);
-    std::cout << "Rate (MB/s): " << 1.0e-6 * (2L*bytes)/avgtime
+    std::cout << "Rate (MB/s): " << 1.0e-6 * (4.0*bytes)/avgtime
               << " Avg time (s): " << avgtime << std::endl;
   } else {
     std::cout << "ERROR: Aggregate squared error " << abserr
               << " exceeds threshold " << epsilon << std::endl;
+    return false;
   }
+  return true;
 }
 
 int main(int argc, char* argv[])
 {
-  std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+  std::cout << "Parallel Research Kernels" << std::endl;
   std::cout << "C++11/OpenCL Matrix transpose: B = A^T" << std::endl;
 
   //prk::opencl::listPlatforms();
@@ -184,6 +186,8 @@ int main(int argc, char* argv[])
   /// Setup OpenCL environment
   //////////////////////////////////////////////////////////////////////
 
+  bool success = true;
+
   std::vector<cl::Platform> platforms;
   cl::Platform::get(&platforms);
   for (auto i : platforms) {
@@ -196,13 +200,13 @@ int main(int argc, char* argv[])
               auto e = j.getInfo<CL_DEVICE_EXTENSIONS>();
               auto has64 = prk::stringContains(e,"cl_khr_fp64");
               cl::Context ctx(j);
-              run<float>(ctx, iterations, order);
+              success = run<float>(ctx, iterations, order) && success;
               if (has64) {
-                  run<double>(ctx, iterations, order);
+                  success = run<double>(ctx, iterations, order) && success;
               }
           }
       }
   }
 
-  return 0;
+  return success ? 0 : 1;
 }

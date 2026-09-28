@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     int me = prk::MPI::rank();
 
     if (me == 0) {
-      std::cout << "Parallel Research Kernels version " << PRKVERSION << std::endl;
+      std::cout << "Parallel Research Kernels" << std::endl;
       std::cout << "MPI/C++11 Stencil execution on 2D grid" << std::endl;
     }
 
@@ -113,7 +113,7 @@ int main(int argc, char* argv[])
         n  = std::atoi(argv[2]);
         if (n < 1) {
           throw "ERROR: grid dimension must be positive";
-        } else if (n > prk::get_max_matrix_size()) {
+        } else if (n > (size_t)prk::get_max_matrix_size()) {
           throw "ERROR: grid dimension too large - overflow risk";
         }
 
@@ -233,8 +233,12 @@ int main(int argc, char* argv[])
         norm += prk::abs(out[i*n+j]);
       }
     }
+    // Every rank redundantly computes the identical full n*n grid (there is
+    // no domain decomposition/halo exchange in this file), so summing norm
+    // across ranks over-counts by a factor of np; divide it back out.
     norm = prk::MPI::sum(norm);
     norm /= active_points;
+    norm /= np;
 
     // verify correctness
     const double epsilon = 1.0e-8;
