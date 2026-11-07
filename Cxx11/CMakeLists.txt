@@ -44,6 +44,7 @@ add_compile_definitions(PRKVERSION=${PRK_VERSION_DEFINE})
 find_package(Threads REQUIRED)
 find_package(OpenMP COMPONENTS CXX)
 find_package(MPI COMPONENTS CXX)
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKBlasVendor.cmake")
 find_package(BLAS)
 find_package(OpenCL)
 # TBB is installed here via the oneAPI toolkit, but only on CMAKE_PREFIX_PATH
@@ -467,16 +468,22 @@ if(PRK_WITH_CUDA)
   # operator doesn't parse under nvcc's device-code frontend (genuine
   # nvcc/range-v3 incompatibility, unrelated to the CUB/for_each issue
   # below); use native C++20 std::ranges here instead, which nvcc handles.
-  if(PRK_CXX20_SUPPORTED)
+  # nvcc only grew C++20 support in CUDA 12; older toolkits (e.g. 11.5)
+  # make CMake fail at generate time ("requires the language dialect CUDA20
+  # ... but CMake does not know the compile flags"), so key off CMake's own
+  # knowledge of what this nvcc supports instead of just the host compiler.
+  if(PRK_CXX20_SUPPORTED AND "cuda_std_20" IN_LIST CMAKE_CUDA_COMPILE_FEATURES)
     prk_cxx_executable(transpose-device-thrust SOURCES transpose-device-thrust.cu DEFS USE_GCC_RANGES)
     set_target_properties(cxx11_transpose-device-thrust PROPERTIES CUDA_STANDARD 20)
-  elseif(PRK_RANGE_V3_FOUND)
-    prk_cxx_executable(transpose-device-thrust SOURCES transpose-device-thrust.cu
-      INCLUDES ${PRK_RANGE_V3_INCLUDE_DIR} DEFS USE_RANGES_TS)
   else()
-    prk_cxx_executable(transpose-device-thrust SOURCES transpose-device-thrust.cu)
+    # No range-v3 fallback: its semiregular_box doesn't parse under nvcc (see
+    # above), and the source has no non-ranges path, so skip the target.
+    message(STATUS "Cxx11 transpose-device-thrust: skipped, nvcc ${CMAKE_CUDA_COMPILER_VERSION} lacks C++20 (needs CUDA >= 12 and a CMake that knows it)")
   endif()
-  list(APPEND _thrust_targets cxx11_nstream-device-thrust cxx11_transpose-device-thrust)
+  list(APPEND _thrust_targets cxx11_nstream-device-thrust)
+  if(TARGET cxx11_transpose-device-thrust)
+    list(APPEND _thrust_targets cxx11_transpose-device-thrust)
+  endif()
   add_custom_target(cxx11_thrust DEPENDS ${_thrust_targets})
 
   if(PRK_CUDASTF_FOUND AND PRK_CUDASTF_WORKS)
@@ -861,7 +868,9 @@ if(PRK_WITH_CUDA)
     prk_cxx_test(cxx11_thrust_host_transpose   COMMAND transpose-host-thrust 10 1024)
   endif()
   prk_cxx_test(cxx11_thrust_device_nstream   COMMAND nstream-device-thrust 10 16777216)
-  prk_cxx_test(cxx11_thrust_device_transpose COMMAND transpose-device-thrust 10 1024)
+  if(TARGET cxx11_transpose-device-thrust)
+    prk_cxx_test(cxx11_thrust_device_transpose COMMAND transpose-device-thrust 10 1024)
+  endif()
 
   if(PRK_CUDASTF_FOUND AND PRK_CUDASTF_WORKS)
     prk_cxx_test(cxx11_cudastf_dgemm     COMMAND dgemm-cudastf 10 400)

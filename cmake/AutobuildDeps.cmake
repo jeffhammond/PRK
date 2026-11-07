@@ -257,6 +257,12 @@ function(prk_autobuild_raja)
                     "(e.g. cmake -S Cxx11 -B Cxx11/build) -- RAJA/BLT itself refuses in-source builds")
     return()
   endif()
+  if(CMAKE_VERSION VERSION_LESS 3.23)
+    # RAJA's own CMakeLists.txt has cmake_minimum_required(VERSION 3.23);
+    # fetching it with an older CMake is a hard configure error, so skip.
+    message(STATUS "RAJA: skipped, autobuild needs CMake >= 3.23 (running ${CMAKE_VERSION})")
+    return()
+  endif()
   message(STATUS "RAJA: not found on system, fetching and building from source (GitHub: LLNL/RAJA)")
 
   include(FetchContent)

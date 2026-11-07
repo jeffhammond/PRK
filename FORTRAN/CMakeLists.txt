@@ -34,6 +34,7 @@ set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod")
 
 find_package(OpenMP COMPONENTS Fortran)
 find_package(MPI COMPONENTS Fortran)
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/PRKBlasVendor.cmake")
 find_package(BLAS)
 find_package(LAPACK)
 find_package(OpenACC COMPONENTS Fortran)

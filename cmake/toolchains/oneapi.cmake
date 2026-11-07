@@ -11,12 +11,33 @@
 # matches make.defs.oneapi's own CBLASFLAG=-DMKL -qmkl (MKL is the intended
 # BLAS backend for this toolchain, not OpenBLAS).
 
-set(CMAKE_C_COMPILER       /opt/intel/oneapi/compiler/2026.0/bin/icx   CACHE STRING "")
-set(CMAKE_CXX_COMPILER     /opt/intel/oneapi/compiler/2026.0/bin/icpx  CACHE STRING "")
-set(CMAKE_Fortran_COMPILER /opt/intel/oneapi/compiler/2026.0/bin/ifx   CACHE STRING "")
+# Install locations are not hardcoded to a release: honor an already-sourced
+# setvars.sh (ONEAPI_ROOT/MKLROOT/TBBROOT/I_MPI_ROOT), else use oneAPI's own
+# per-component "latest" symlinks.
+if(DEFINED ENV{ONEAPI_ROOT})
+  set(_oneapi_root "$ENV{ONEAPI_ROOT}")
+else()
+  set(_oneapi_root /opt/intel/oneapi)
+endif()
+function(_oneapi_component var envvar name)
+  if(envvar AND DEFINED ENV{${envvar}} AND EXISTS "$ENV{${envvar}}")
+    set(${var} "$ENV{${envvar}}" PARENT_SCOPE)
+  else()
+    get_filename_component(_r "${_oneapi_root}/${name}/latest" REALPATH)
+    set(${var} "${_r}" PARENT_SCOPE)
+  endif()
+endfunction()
+_oneapi_component(_oneapi_compiler "" compiler)
+_oneapi_component(_oneapi_mkl MKLROOT mkl)
+_oneapi_component(_oneapi_tbb TBBROOT tbb)
+_oneapi_component(_oneapi_mpi I_MPI_ROOT mpi)
 
-set(ENV{MKLROOT} /opt/intel/oneapi/mkl/2026.0)
-set(ENV{TBBROOT} /opt/intel/oneapi/tbb/2023.0)
+set(CMAKE_C_COMPILER       ${_oneapi_compiler}/bin/icx   CACHE STRING "")
+set(CMAKE_CXX_COMPILER     ${_oneapi_compiler}/bin/icpx  CACHE STRING "")
+set(CMAKE_Fortran_COMPILER ${_oneapi_compiler}/bin/ifx   CACHE STRING "")
+
+set(ENV{MKLROOT} ${_oneapi_mkl})
+set(ENV{TBBROOT} ${_oneapi_tbb})
 
 # icx/icpx/ifx-built binaries link against Intel's own runtime libraries
 # (libimf.so etc., not just libc/libstdc++) -- without this on
@@ -25,9 +46,9 @@ set(ENV{TBBROOT} /opt/intel/oneapi/tbb/2023.0)
 # libraries: libimf.so: cannot open shared object file", even though it
 # compiled and linked fine. Normally comes from sourcing setvars.sh.
 if(DEFINED ENV{LD_LIBRARY_PATH})
-  set(ENV{LD_LIBRARY_PATH} "/opt/intel/oneapi/compiler/2026.0/lib:/opt/intel/oneapi/tbb/2023.0/lib/intel64/gcc4.8:$ENV{LD_LIBRARY_PATH}")
+  set(ENV{LD_LIBRARY_PATH} "${_oneapi_compiler}/lib:${_oneapi_tbb}/lib/intel64/gcc4.8:$ENV{LD_LIBRARY_PATH}")
 else()
-  set(ENV{LD_LIBRARY_PATH} "/opt/intel/oneapi/compiler/2026.0/lib:/opt/intel/oneapi/tbb/2023.0/lib/intel64/gcc4.8")
+  set(ENV{LD_LIBRARY_PATH} "${_oneapi_compiler}/lib:${_oneapi_tbb}/lib/intel64/gcc4.8")
 endif()
 
 # make.defs.oneapi's MPI targets are built with Intel's own MPI wrappers
@@ -41,8 +62,8 @@ endif()
 # I_MPI_ROOT set (normally by setvars.sh) -- without it they substitute a
 # literal broken placeholder path ("I_MPI_SUBSTITUTE_INSTALLDIR") into
 # their own -I/-L flags instead of the real install location.
-set(ENV{I_MPI_ROOT} /opt/intel/oneapi/mpi/2021.18)
-set(ENV{PATH} "/opt/intel/oneapi/mpi/2021.18/bin:$ENV{PATH}")
+set(ENV{I_MPI_ROOT} ${_oneapi_mpi})
+set(ENV{PATH} "${_oneapi_mpi}/bin:$ENV{PATH}")
 # LIBRARY_PATH (compile/link-time -l search, distinct from LD_LIBRARY_PATH's
 # runtime search) is needed by third-party autobuilt dependencies (e.g.
 # FORTRAN's Global Arrays/ARMCI-MPI) whose own ./configure invokes the
@@ -50,7 +71,7 @@ set(ENV{PATH} "/opt/intel/oneapi/mpi/2021.18/bin:$ENV{PATH}")
 # wrapper script -- without it, linking fails outright ("cannot find
 # -lmpifort").
 if(DEFINED ENV{LIBRARY_PATH})
-  set(ENV{LIBRARY_PATH} "/opt/intel/oneapi/mpi/2021.18/lib:$ENV{LIBRARY_PATH}")
+  set(ENV{LIBRARY_PATH} "${_oneapi_mpi}/lib:$ENV{LIBRARY_PATH}")
 else()
-  set(ENV{LIBRARY_PATH} "/opt/intel/oneapi/mpi/2021.18/lib")
+  set(ENV{LIBRARY_PATH} "${_oneapi_mpi}/lib")
 endif()
